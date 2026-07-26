@@ -1,0 +1,10 @@
+# 图床 / 文件服务器配置
+# 复制为 config.yaml 并填入真实值
+
+host: "0.0.0.0"
+port: 8081
+token: "你的Token"
+public-url: "你的域名"
+cache-dir: "./file_cache"
+max-cache-mb: 1024
+max-file-mb: 100
