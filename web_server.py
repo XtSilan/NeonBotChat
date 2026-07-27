@@ -294,6 +294,7 @@ async def api_send_media(request: Request):
         ext_map = {"video": "mp4", "voice": "wav", "image": "png", "file": "bin"}
         attachments = _json.dumps([{"content_type": ct_map.get(file_type, "image/png"), "url": file_url, "filename": file_name or f"media.{ext_map.get(file_type, 'png')}"}], ensure_ascii=False)
         qq_msg_id = str(result.get("id", ""))
+        ref_idx = result.get("ext_info", {}).get("ref_idx", "") if isinstance(result, dict) else ""
         saved = await _db.save_message(
             conversation_id=conv_id,
             sender_openid="self",
@@ -303,6 +304,7 @@ async def api_send_media(request: Request):
             msg_type=0,
             msg_id=qq_msg_id,
             attachments=attachments,
+            ref_idx=ref_idx,
         )
         await manager.broadcast({"type": "new_message", "data": saved})
         return {"ok": True, "message": saved, "qq_result": result}
@@ -344,7 +346,13 @@ async def api_upload_to_file_server(request: Request):
 
 @app.get("/api/settings")
 async def api_get_settings():
-    return _load_settings()
+    data = _load_settings()
+    # 附带文件服务器 URL（供前端判断直链）
+    from botpy.ext.cog_yaml import read as _read_cfg
+    _raw = _read_cfg(os.path.join(os.path.dirname(__file__), "config.yaml"))
+    fs = (_raw or {}).get("file-server", {})
+    data["_file_server_url"] = fs.get("public-url", "").rstrip("/")
+    return data
 
 
 @app.post("/api/settings")
@@ -517,6 +525,8 @@ async def api_send(request: Request):
     conv_id: str = body.get("conv_id", "")
     content: str = body.get("content", "")
     msg_type: int = body.get("msg_type", 0)
+    message_reference: dict = body.get("message_reference", None)
+    quote_thumbs: str = body.get("quote_thumbs", "")
 
     if not conv_id or not content.strip():
         return JSONResponse({"error": "conv_id 和 content 不能为空"}, status_code=400)
@@ -527,7 +537,7 @@ async def api_send(request: Request):
 
     # 2) 调用 QQ API 发送
     try:
-        result = await send_group_msg(conv_id, content, msg_type=msg_type)
+        result = await send_group_msg(conv_id, content, msg_type=msg_type, message_reference=message_reference)
         # 检查 QQ API 是否返回了错误
         if result.get("code") or result.get("err_code") or result.get("error"):
             err_msg = result.get("message", "") or result.get("msg", "") or result.get("error", "") or "未知错误"
@@ -536,6 +546,39 @@ async def api_send(request: Request):
         return JSONResponse({"error": f"发送失败: {str(e)}"}, status_code=500)
 
     # 2) 写入本地数据库
+    ref_idx = result.get("ext_info", {}).get("ref_idx", "") if isinstance(result, dict) else ""
+    quoted_sender = ""
+    quoted_content = ""
+    if message_reference and message_reference.get("message_id"):
+        import sqlite3, os as _os
+        try:
+            qconn = sqlite3.connect(_os.path.join(_os.path.dirname(__file__), "neonbot.db"))
+            qconn.row_factory = sqlite3.Row
+            qrow = qconn.execute(
+                "SELECT sender_name, content, attachments FROM messages WHERE conversation_id=? AND ref_idx=? ORDER BY id DESC LIMIT 1",
+                (conv_id, message_reference["message_id"])
+            ).fetchone()
+            qconn.close()
+            if qrow:
+                quoted_sender = qrow["sender_name"] or ""
+                quoted_content = qrow["content"] or ""
+                # 如果有附件，提取 URL 供缩略图使用
+                if qrow["attachments"]:
+                    try:
+                        import json as _j
+                        atts = _j.loads(qrow["attachments"])
+                        thumbs = []
+                        for a in atts:
+                            ct = a.get("content_type", "")
+                            url = a.get("url", "")
+                            if url and (ct.startswith("image/") or ct.startswith("video/")):
+                                thumbs.append({"url": url, "type": "image" if ct.startswith("image/") else "video"})
+                        if thumbs:
+                            quoted_content = quoted_content or ""
+                    except Exception:
+                        pass
+        except Exception:
+            pass
     from database import bot_name
     saved = await save_message(
         conversation_id=conv_id,
@@ -545,6 +588,10 @@ async def api_send(request: Request):
         direction="outgoing",
         msg_id=str(result.get("id", "")),
         msg_type=msg_type,
+        ref_idx=ref_idx,
+        quoted_sender=quoted_sender,
+        quoted_content=quoted_content,
+        quote_thumbs=quote_thumbs,
     )
 
     # 3) 广播给所有 WebUI 客户端

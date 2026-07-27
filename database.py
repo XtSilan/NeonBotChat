@@ -74,8 +74,10 @@ def init_db() -> None:
             attachments     TEXT DEFAULT '[]',    -- JSON: 附件列表
             member_role     TEXT DEFAULT '',      -- 群角色
             recalled        INTEGER DEFAULT 0,    -- 是否已撤回
+            ref_idx         TEXT DEFAULT '',      -- 消息引用 ID（用于回复）
             quoted_sender   TEXT DEFAULT '',      -- 引用回复：被引用消息发送人
             quoted_content  TEXT DEFAULT '',      -- 引用回复：被引用消息内容
+            quote_thumbs    TEXT DEFAULT '',      -- 引用回复：缩略图 JSON
             timestamp       TEXT DEFAULT (datetime('now','localtime')),
             FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
         );
@@ -202,6 +204,8 @@ async def save_message(
     member_role: str = "",
     quoted_sender: str = "",
     quoted_content: str = "",
+    quote_thumbs: str = "",
+    ref_idx: str = "",
 ) -> dict:
     def _do():
         conn = get_db()
@@ -209,9 +213,9 @@ async def save_message(
         cur = conn.execute("""
             INSERT INTO messages (conversation_id, sender_openid, sender_name,
                                   sender_avatar, content, msg_type, direction, msg_id, attachments, member_role,
-                                  quoted_sender, quoted_content, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (conversation_id, sender_openid, sender_name, sender_avatar, content, msg_type, direction, msg_id, attachments, member_role, quoted_sender, quoted_content, now))
+                                  quoted_sender, quoted_content, quote_thumbs, ref_idx, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (conversation_id, sender_openid, sender_name, sender_avatar, content, msg_type, direction, msg_id, attachments, member_role, quoted_sender, quoted_content, quote_thumbs, ref_idx, now))
         msg_pk = cur.lastrowid
 
         # 更新会话摘要

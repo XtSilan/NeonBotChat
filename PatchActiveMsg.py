@@ -69,6 +69,7 @@ async def send_group_msg(
     group_openid: str,
     content: str,
     msg_type: int = 0,
+    message_reference: dict = None,
 ) -> dict:
     """
     主动发送群消息（绕过 botpy）
@@ -95,6 +96,8 @@ async def send_group_msg(
         payload["markdown"] = {"content": content}
     else:
         payload["content"] = content
+    if message_reference:
+        payload["message_reference"] = message_reference
 
     async with aiohttp.ClientSession() as session:
         async with session.post(url, headers=headers, json=payload) as resp:

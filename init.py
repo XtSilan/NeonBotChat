@@ -30,6 +30,8 @@ from PatchMsg import (
     get_username,
     get_msg_type,
     get_msg_elements,
+    get_msg_ref_idx,
+    get_ref_msg_idx,
 )
 from PatchActiveMsg import send_group_msg
 from PatchUserInfo import getUserName, replace_mentions_with_names
@@ -115,26 +117,46 @@ class MyClient(botpy.Client):
             # 引用回复消息：提取被引用消息的内容
             quoted_sender = ""
             quoted_content = ""
+            quote_thumbs_str = ""
             msg_type_raw = get_msg_type(msg_id_for_att)
             if msg_type_raw == 103:
                 elements = get_msg_elements(msg_id_for_att)
+                # 优先通过 ref_msg_idx 反查本地 DB
+                qmsg_content = ""
                 if elements:
-                    quoted_content = elements[0].get("content", "")
-                    # 尝试从本地 DB 反查被引用消息的发件人
-                    if quoted_content:
-                        try:
-                            import sqlite3, os as _os
-                            qconn = sqlite3.connect(_os.path.join(_os.path.dirname(__file__), "neonbot.db"))
-                            qconn.row_factory = sqlite3.Row
-                            qrow = qconn.execute(
-                                "SELECT sender_name FROM messages WHERE conversation_id=? AND content=? ORDER BY id DESC LIMIT 1",
-                                (group_id, quoted_content)
-                            ).fetchone()
-                            qconn.close()
-                            if qrow:
-                                quoted_sender = qrow["sender_name"] or ""
-                        except Exception:
-                            pass
+                    qmsg_content = elements[0].get("content", "")
+                import sqlite3 as _sq, os as _os
+                try:
+                    qconn = _sq.connect(_os.path.join(_os.path.dirname(__file__), "neonbot.db"))
+                    qconn.row_factory = _sq.Row
+                    qrow = qconn.execute(
+                        "SELECT sender_name, content, attachments FROM messages WHERE conversation_id=? AND ref_idx=? ORDER BY id DESC LIMIT 1",
+                        (group_id, get_ref_msg_idx(msg_id_for_att))
+                    ).fetchone()
+                    qconn.close()
+                    if qrow:
+                        quoted_sender = qrow["sender_name"] or ""
+                        quoted_content = qrow["content"] or ""
+                        # 提取缩略图
+                        if qrow["attachments"]:
+                            try:
+                                import json as _j
+                                atts = _j.loads(qrow["attachments"])
+                                thumbs = []
+                                for a in atts:
+                                    ct = a.get("content_type", "")
+                                    url = a.get("url", "")
+                                    if url and (ct.startswith("image/") or ct.startswith("video/")):
+                                        thumbs.append({"url": url, "type": "image" if ct.startswith("image/") else "video"})
+                                if thumbs:
+                                    quote_thumbs_str = _j.dumps(thumbs, ensure_ascii=False)
+                            except Exception:
+                                pass
+                    elif qmsg_content and qmsg_content.strip():
+                        quoted_content = qmsg_content
+                except Exception:
+                    if qmsg_content and qmsg_content.strip():
+                        quoted_content = qmsg_content
             if not raw_attachments:
                 # 降级：从 botpy 对象取
                 for src in ("attachments", "data", "_data"):
@@ -239,8 +261,10 @@ class MyClient(botpy.Client):
                 sender_avatar=avatar_url,
                 attachments=attachments_json,
                 member_role=member_role,
+                ref_idx=get_msg_ref_idx(msg_id_for_att),
                 quoted_sender=quoted_sender,
                 quoted_content=quoted_content,
+                quote_thumbs=quote_thumbs_str,
             )
 
             # 补上 @信息

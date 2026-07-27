@@ -289,6 +289,20 @@ body {
 .md-toggle.active { color: var(--accent); border-color: var(--accent); background: rgba(88, 101, 242, 0.1); }
 .md-toggle input { accent-color: var(--accent); }
 
+/* ── Input Quote Bar ─────────────────────────── */
+.input-quote-bar {
+  width: 100%; display: flex; align-items: flex-start; gap: 8px;
+  background: rgba(58, 59, 64, 0.5); border-radius: 8px;
+  padding: 8px 12px; margin-bottom: 8px;
+  border-left: 3px solid var(--accent);
+}
+.input-quote-content { flex: 1; min-width: 0; }
+.input-quote-sender { font-size: 0.78em; color: var(--accent); font-weight: 600; }
+.input-quote-text { font-size: 0.82em; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.input-quote-thumb { display: inline-flex; flex-shrink: 0; }
+.input-quote-close { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 1em; padding: 2px 4px; flex-shrink: 0; }
+.input-quote-close:hover { color: var(--danger); }
+
 /* ── Rich Media Popup ────────────────────────── */
 .rich-popup {
   position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
@@ -320,7 +334,12 @@ body {
   border-left: 3px solid var(--accent);
   font-size: 0.85em; line-height: 1.4;
 }
-.quote-box .quote-sender { font-size: 0.82em; color: var(--accent); font-weight: 600; }
+.quote-box .quote-sender { font-size: 0.82em; font-weight: 600; }
+.msg-row.in .quote-sender { color: var(--accent); }
+.msg-row.out .quote-sender { color: rgba(255,255,255,0.75); }
+.msg-row.out .quote-content { color: rgba(255,255,255,0.6); }
+.msg-row.out .quote-box .svg-icon { filter: invert(1) !important; opacity: 0.75; }
+.quote-box .quote-sender .svg-icon { filter: none !important; }
 .quote-box .quote-content { color: var(--text-dim); white-space: pre-wrap; word-break: break-word; }
 
 /* ── File Card ───────────────────────────────── */
@@ -515,6 +534,7 @@ body.light .role-管理员 { color: #2a48b0; }
 body.light .quote-box { background: rgba(0,0,0,0.08); }
 body.light .file-card { background: rgba(0,0,0,0.06); }
 body.light .file-card:hover { background: rgba(0,0,0,0.12); }
+body.light .input-quote-bar { background: rgba(0,0,0,0.06); }
 body.light .glass-btn { background: rgba(0,0,0,0.06); color: #1a1b1e; }
 body.light .glass-btn:hover { background: rgba(0,0,0,0.12); }
 body.light .glass-btn.active { background: var(--accent); color: #fff; }
@@ -679,7 +699,7 @@ body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) 
       <div class="settings-tab" id="tab-about" style="display:none; text-align:center;">
         <h3>关于</h3>
         <p style="margin:12px 0;"><img src="icons/bot.svg" class="svg-icon" style="width:48px;height:48px;" alt=""></p>
-        <p style="font-size:1.2em;font-weight:700;margin:8px 0;">NeonBot v26.7.6</p>
+        <p style="font-size:1.2em;font-weight:700;margin:8px 0;">NeonBot v26.7.7</p>
         <a href="/api/readme" target="_blank" style="color:var(--accent);font-size:0.9em;display:block;margin-top:16px;"><img src="icons/documents.svg" class="svg-icon" style="width:14px;height:14px;" alt=""> 阅读 README.md</a>
         <p style="color:var(--text-dim);font-size:0.85em;margin-top:12px;">Copyright © 2026 Neon. All Rights Reserved.</p>
       </div>
@@ -692,6 +712,7 @@ body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) 
   <div class="ctx-item" id="ctxCopy"><img src="icons/copy.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 复制</div>
   <div class="ctx-item" id="ctxForward"><img src="icons/share.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 转发</div>
   <div class="ctx-item" id="ctxFavorite"><img src="icons/favourite.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 收藏</div>
+  <div class="ctx-item" id="ctxQuote"><img src="icons/quote.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 引用</div>
   <div class="ctx-item" id="ctxMultiSelect"><img src="icons/multiple_choice.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 多选</div>
   <div class="ctx-sep"></div>
   <div class="ctx-item" id="ctxRecall"><img src="icons/recall.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 撤回</div>
@@ -746,11 +767,20 @@ body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) 
     <div>选择一个会话</div>
   </div>
   <div class="messages" id="messages" style="display:none;"></div>
-  <div class="input-area" id="inputArea" style="display:none;">
+  <div class="input-area" id="inputArea" style="display:none;flex-direction:column;">
+    <div class="input-quote-bar" id="inputQuoteBar" style="display:none;">
+      <div class="input-quote-content">
+        <div class="input-quote-sender" id="inputQuoteSender"></div>
+        <div class="input-quote-text" id="inputQuoteText"></div>
+      </div>
+      <button class="input-quote-close" id="inputQuoteClose">✕</button>
+    </div>
+    <div style="display:flex;gap:10px;align-items:flex-end;width:100%;">
     <textarea id="msgInput" rows="1" placeholder="输入消息… (Enter 发送, Shift+Enter 换行)" disabled></textarea>
     <label class="md-toggle" id="mdToggle" title="发送为 Markdown" style="display:none;"><input type="checkbox" id="mdCheckbox"> MD</label>
     <button class="md-toggle" id="richMediaBtn" title="发送富媒体">＋</button>
     <button id="sendBtn" disabled>发送</button>
+    </div>
   </div>
 
 <!-- ═══════════ Rich Media Menu ═══════════ -->
@@ -907,6 +937,24 @@ function renderConvList(filter = '') {
 function icon(name, sz = 18) {
   return `<img src="icons/${name}.svg" class="svg-icon" style="width:${sz}px;height:${sz}px;" alt="">`;
 }
+function parseQuoteThumbs(data) {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  try { return JSON.parse(data) || []; } catch { return []; }
+}
+function quoteThumbHtml(thumbs) {
+  const list = parseQuoteThumbs(thumbs);
+  if (!list || !list.length) return '';
+  return list.map(t => {
+    const isDirect = isFileServerUrl(t.url);
+    const src = isDirect ? t.url : `/api/image?url=${encodeURIComponent(t.url)}`;
+    return `<div class="input-quote-thumb">${t.type === 'image'
+      ? `<img src="${escHtml(src)}" style="max-width:56px;max-height:42px;object-fit:contain;border-radius:4px;pointer-events:none;" alt="">`
+      : `<video src="${escHtml(src)}" style="max-width:56px;max-height:42px;object-fit:contain;border-radius:4px;pointer-events:none;" muted></video>`
+    }</div>`;
+  }).join('');
+}
+
 function fmtBotMarker(name) {
   // 将名字中的 🤖 替换为 bot.svg 图标
   if (!name) return name;
@@ -1013,6 +1061,7 @@ function appendMessage(msg, scroll) {
   div.dataset.msgTimestamp = msg.timestamp || '';
   div.dataset.msgMemberRole = msg.member_role || '';
   div.dataset.msgType = msg.msg_type || 0;
+  div.dataset.msgRefIdx = msg.ref_idx || '';
   div.addEventListener('contextmenu', onMsgContextMenu);
 
   // 解析附件
@@ -1024,7 +1073,7 @@ function appendMessage(msg, scroll) {
       const rawUrl = a.content_type === 'voice' ? (a.voice_wav_url || a.url) : a.url;
       if (rawUrl) {
         // 图床 / 语音直接用原始 URL，QQ CDN 走代理
-        const isDirect = a.content_type === 'voice' || (a.content_type && a.content_type.startsWith('audio/')) || rawUrl.includes('spj2025.top') || rawUrl.includes('36337');
+        const isDirect = a.content_type === 'voice' || (a.content_type && a.content_type.startsWith('audio/')) || isFileServerUrl(rawUrl);
         const mediaUrl = isDirect ? rawUrl : `/api/image?url=${encodeURIComponent(rawUrl)}`;
         const isVoice = a.content_type === 'voice' || (a.content_type && a.content_type.startsWith('audio/'));
         if (a.content_type && a.content_type.startsWith('image/')) {
@@ -1089,7 +1138,7 @@ function appendMessage(msg, scroll) {
         ? `<div class="msg-sender${msg.direction === 'outgoing' ? ' sender-self' : ''}${msg.member_role ? ' role-' + msg.member_role : ''}">${msg.direction === 'outgoing' ? icon('bot', 14) + ' ' : ''}${msg.sender_avatar && msg.direction !== 'outgoing' ? `<img src="${escHtml(msg.sender_avatar)}" onerror="this.style.display='none'" alt="" onclick="event.stopPropagation();viewImage('${escHtml(msg.sender_avatar)}')" style="cursor:pointer;">` : ''}${msg.direction === 'outgoing' ? escHtml(msg.sender_name.replace(/ 🤖$/, '')) : fmtBotMarker(escHtml(msg.sender_name))}${roleBadge(msg.member_role)}${msg.direction === 'outgoing' && getBotAvatar() ? `<img src="${escHtml(getBotAvatar())}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;cursor:pointer;margin-left:4px;" onerror="this.style.display='none'" onclick="event.stopPropagation();viewImage('${escHtml(getBotAvatar())}')">` : ''}</div>`
         : ''}
       ${attachHtml}
-      ${msg.quoted_content ? `<div class="quote-box"><div class="quote-sender">${fmtBotMarker(escHtml(msg.quoted_sender || '未知用户'))}</div><div class="quote-content">${escHtmlWithBr(msg.quoted_content)}</div></div>` : ''}
+      ${msg.quoted_content ? `<div class="quote-box"><div class="quote-sender">${fmtBotMarker(escHtml(msg.quoted_sender || '未知用户'))}</div><div class="quote-content">${['[图片]','[视频]'].includes(msg.quoted_content) ? '' : escHtmlWithBr(msg.quoted_content)}${quoteThumbHtml(msg.quote_thumbs)}</div></div>` : ''}
       ${msg.content && !placeholders.includes(msg.content) && !msg.content.startsWith('[文件]') ? `<div class="${isPlaceholder ? 'media-placeholder' : ''}">${(msg.msg_type == 2) ? renderMarkdown(msg.content) : escHtmlWithBr(msg.content)}</div>` : (isPlaceholder ? `<div class="media-placeholder">${escHtmlWithBr(msg.content)}</div>` : '')}
     </div>
   `;
@@ -1143,6 +1192,7 @@ function scrollBottom() {
 
 // ── 发送消息 ────────────────────────────────────────
 let pendingId = 0;
+let currentQuoteRef = null;  // 当前引用的消息 ref_idx
 let botDisplayName = '';  // Bot 自己的显示名称
 
 async function sendMessage(retryMsgId) {
@@ -1162,6 +1212,9 @@ async function sendMessage(retryMsgId) {
 
   // 检查是否发送为 markdown
   const msgType = $('#mdCheckbox').checked ? 2 : 0;
+  const quoteRef = currentQuoteRef;
+  currentQuoteRef = null;
+  $('#inputQuoteBar').style.display = 'none';
 
   const tempId = isRetry ? retryMsgId : `pending_${++pendingId}`;
 
@@ -1176,6 +1229,9 @@ async function sendMessage(retryMsgId) {
     msg_type: msgType,
     timestamp: new Date().toISOString(),
     sender_avatar: '',
+    quoted_sender: quoteRef ? (quoteRef.quoted_sender || '') : '',
+    quoted_content: quoteRef ? (quoteRef.quoted_content || '') : '',
+    quote_thumbs: quoteRef ? (quoteRef.thumbs || []) : [],
   };
   appendPendingMessage(fakeMsg);
   if (!isRetry) {
@@ -1192,7 +1248,7 @@ async function sendMessage(retryMsgId) {
     const result = await API('/api/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conv_id: currentConv, content, msg_type: msgType }),
+      body: JSON.stringify({ conv_id: currentConv, content, msg_type: msgType, message_reference: quoteRef ? { message_id: quoteRef.message_id } : undefined, quote_thumbs: quoteRef ? JSON.stringify(quoteRef.thumbs || []) : '' }),
     });
     if (result.error) {
       markMessageFailed(tempId);
@@ -1218,6 +1274,7 @@ function appendPendingMessage(msg) {
   div.innerHTML = `
     <div class="msg-bubble">
       ${msg.sender_name ? `<div class="msg-sender sender-self">${icon('bot', 14)} ${escHtml(msg.sender_name.replace(/ 🤖$/, ''))}${getBotAvatar() ? `<img src="${escHtml(getBotAvatar())}" onerror="this.style.display='none'" style="width:20px;height:20px;border-radius:50%;object-fit:cover;cursor:pointer;margin-left:4px;">` : ''}</div>` : ''}
+      ${msg.quoted_content ? `<div class="quote-box"><div class="quote-sender">${fmtBotMarker(escHtml(msg.quoted_sender || '未知用户'))}</div><div class="quote-content">${['[图片]','[视频]'].includes(msg.quoted_content) ? '' : escHtmlWithBr(msg.quoted_content)}${quoteThumbHtml(msg.quote_thumbs)}</div></div>` : ''}
       <div>${(msg.msg_type == 2) ? renderMarkdown(msg.content) : escHtmlWithBr(msg.content)}</div>
     </div>
     <button class="msg-retry" onclick="sendMessage('${msg.pending_id}')" title="重发">!</button>
@@ -1246,11 +1303,15 @@ function replacePendingMessage(pendingId, realMsg) {
   el.dataset.msgTimestamp = realMsg.timestamp || '';
   el.dataset.msgMemberRole = realMsg.member_role || '';
   el.dataset.msgType = realMsg.msg_type || 0;
+  el.dataset.msgRefIdx = realMsg.ref_idx || '';
   el.removeAttribute('data-pending-id');
+  const oldQuoteBox = el.querySelector('.quote-box');
+  const oldQuoteHTML = oldQuoteBox ? oldQuoteBox.outerHTML : '';
 
   el.innerHTML = `
     <div class="msg-bubble">
       ${realMsg.sender_name ? `<div class="msg-sender sender-self${realMsg.member_role ? ' role-' + realMsg.member_role : ''}">${icon('bot', 14)} ${escHtml(realMsg.sender_name.replace(/ 🤖$/, ''))}${roleBadge(realMsg.member_role)}${getBotAvatar() ? `<img src="${escHtml(getBotAvatar())}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;cursor:pointer;margin-left:4px;" onerror="this.style.display='none'" onclick="event.stopPropagation();viewImage('${escHtml(getBotAvatar())}')">` : ''}</div>` : ''}
+      ${realMsg.quoted_content ? `<div class="quote-box"><div class="quote-sender">${fmtBotMarker(escHtml(realMsg.quoted_sender || '未知用户'))}</div><div class="quote-content">${['[图片]','[视频]'].includes(realMsg.quoted_content) ? '' : escHtmlWithBr(realMsg.quoted_content)}</div></div>` : ''}
       <div>${(realMsg.msg_type == 2) ? renderMarkdown(realMsg.content) : escHtmlWithBr(realMsg.content)}</div>
     </div>
   `;
@@ -1260,6 +1321,11 @@ function replacePendingMessage(pendingId, realMsg) {
 
   // 更新 lastMsgId
   if (realMsg.id) lastMsgId = Math.max(lastMsgId, realMsg.id);
+  // 恢复引用框缩略图（服务器不存 thumb URL）
+  if (oldQuoteHTML) {
+    const newQuote = el.querySelector('.quote-box');
+    if (newQuote) newQuote.outerHTML = oldQuoteHTML;
+  }
 }
 
 function markMessageFailed(pendingId) {
@@ -1419,7 +1485,7 @@ $('#richFileInput').addEventListener('change', async function() {
       return;
     }
 
-    const fileUrl = upR.url || `http://spj2025.top:36337/get/${upR.file_id}`;
+    const fileUrl = upR.url || (fileServerUrl ? `${fileServerUrl}/get/${upR.file_id}` : upR.url || '');
     pendingDiv.querySelector('.msg-bubble > div:last-of-type').textContent = '发送中…';
 
     // 第二步：通过 QQ API 发送
@@ -1456,6 +1522,7 @@ $('#richFileInput').addEventListener('change', async function() {
       pendingDiv.dataset.msgContent = placeholder;
       pendingDiv.dataset.msgSender = sendR.message.sender_name || '';
       pendingDiv.dataset.msgTimestamp = sendR.message.timestamp || '';
+      pendingDiv.dataset.msgRefIdx = sendR.message.ref_idx || '';
       pendingDiv.removeAttribute('data-pending-id');
       lastMsgId = Math.max(lastMsgId, sendR.message.id);
     }
@@ -1683,12 +1750,19 @@ function onMsgContextMenu(e) {
     const bubble = this.querySelector('.msg-bubble');
     if (bubble) content = bubble.textContent.replace(/^\s+|\s+$/g, '');
   }
+  // 提取原始 URL（去掉代理前缀）
+  const unwrapUrl = (src) => {
+    if (src.includes('/api/image?url=')) {
+      return decodeURIComponent(src.split('/api/image?url=')[1]);
+    }
+    return src;
+  };
   const imgs = this.querySelectorAll('.msg-image');
-  const imgUrls = [...imgs].map(img => img.src || '').filter(Boolean);
+  const imgUrls = [...imgs].map(img => unwrapUrl(img.src || '')).filter(Boolean);
   const videos = this.querySelectorAll('.msg-video');
-  const videoUrls = [...videos].map(v => v.src || '').filter(Boolean);
+  const videoUrls = [...videos].map(v => unwrapUrl(v.src || '')).filter(Boolean);
   const audios = this.querySelectorAll('.msg-audio');
-  const audioUrls = [...audios].map(a => a.src || '').filter(Boolean);
+  const audioUrls = [...audios].map(a => unwrapUrl(a.src || '')).filter(Boolean);
   const asrEls = this.querySelectorAll('.asr-text');
   const asrTexts = [...asrEls].map(el => el.textContent || '').filter(Boolean);
 
@@ -1704,6 +1778,7 @@ function onMsgContextMenu(e) {
     sender_avatar: this.dataset.msgSenderAvatar || '',
     member_role: this.dataset.msgMemberRole || '',
     msg_type: parseInt(this.dataset.msgType) || 0,
+    ref_idx: this.dataset.msgRefIdx || '',
     timestamp: this.dataset.msgTimestamp || '',
     el: this,
   };
@@ -1878,7 +1953,7 @@ async function refreshStatus() {
     const info = await API('/api/system-info');
     $sc.innerHTML = `
       <div style="text-align:center;margin-bottom:12px;">
-        <span style="font-size:1.1em;font-weight:700;"><img src="icons/bot.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> NeonBotChat v26.7.6</span>
+        <span style="font-size:1.1em;font-weight:700;"><img src="icons/bot.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> NeonBotChat v26.7.7</span>
       </div>
       <div class="stat-card">
         <div class="stat-label"><img src="icons/system.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 系统</div>
@@ -1993,7 +2068,7 @@ $('#btnOkForward').addEventListener('click', async () => {
       showToast(`⏳ 转发${m.type === 'image' ? '图片' : m.type === 'video' ? '视频' : '语音'}中…`);
       try {
         // 图床直链或语音直接使用，其他的先上传到图床
-        const isDirect = m.url.includes('spj2025.top') || m.url.includes('36337') || m.type === 'voice';
+        const isDirect = isFileServerUrl(m.url) || m.type === 'voice';
         let fileUrl = m.url;
         if (!isDirect) {
           const resp = await fetch('/api/image?url=' + encodeURIComponent(m.url));
@@ -2002,7 +2077,7 @@ $('#btnOkForward').addEventListener('click', async () => {
           form.append('file', blob, 'media.' + m.ext);
           const upR = await fetch('/api/upload-file', { method: 'POST', body: form }).then(r => r.json());
           if (upR.code !== 200) { showToast('⚠ 图床上传失败'); continue; }
-          fileUrl = upR.url || `http://spj2025.top:36337/get/${upR.file_id}`;
+          fileUrl = upR.url || (fileServerUrl ? `${fileServerUrl}/get/${upR.file_id}` : upR.url || '');
         }
         const sendR = await API('/api/send-media', {
           method: 'POST',
@@ -2042,6 +2117,48 @@ $('#ctxRecall').addEventListener('click', async () => {
     const r = await API(`/api/recall/${ctxTargetMsg.id}`, { method: 'POST' });
     if (r.error) { showToast('⚠ ' + r.error); }
   } catch (e) { showToast('⚠ 网络错误: ' + e.message); }
+});
+
+$('#ctxQuote').addEventListener('click', () => {
+  if (!ctxTargetMsg?.ref_idx) { showToast('⚠ 该消息无引用 ID'); $ctxMenu.style.display = 'none'; return; }
+  // 收集引用消息的附件缩略图
+  const quoteImgs = ctxTargetMsg.imgUrls || [];
+  const quoteVideos = ctxTargetMsg.videoUrls || [];
+  const quoteThumbs = [
+    ...quoteImgs.map(u => ({ url: u, type: 'image' })),
+    ...quoteVideos.map(u => ({ url: u, type: 'video' })),
+  ];
+  currentQuoteRef = {
+    message_id: ctxTargetMsg.ref_idx,
+    quoted_sender: ctxTargetMsg.sender_name || '未知用户',
+    quoted_content: ctxTargetMsg.content || '',
+    thumbs: quoteThumbs,
+  };
+  // 显示引用栏
+  $('#inputQuoteSender').textContent = currentQuoteRef.quoted_sender;
+  const placeholderKeys = ['[图片]', '[视频]', '[语音]', '[文件]'];
+  let quoteText = currentQuoteRef.quoted_content || '';
+  if (placeholderKeys.includes(quoteText) && (currentQuoteRef.thumbs || []).length > 0) {
+    quoteText = '';
+  }
+  let thumbHtml = '';
+  (currentQuoteRef.thumbs || []).forEach(t => {
+    const isDirect = isFileServerUrl(t.url);
+    const src = isDirect ? t.url : `/api/image?url=${encodeURIComponent(t.url)}`;
+    thumbHtml += `<div class="input-quote-thumb">${t.type === 'image'
+      ? `<img src="${escHtml(src)}" style="max-width:64px;max-height:48px;object-fit:contain;border-radius:4px;pointer-events:none;" alt="">`
+      : `<video src="${escHtml(src)}" style="max-width:64px;max-height:48px;object-fit:contain;border-radius:4px;pointer-events:none;" muted></video>`
+    }</div>`;
+  });
+  $('#inputQuoteText').innerHTML = (quoteText || '') + thumbHtml;
+  $('#inputQuoteBar').style.display = 'flex';
+  $('#msgInput').focus();
+  $ctxMenu.style.display = 'none';
+});
+
+$('#inputQuoteClose').addEventListener('click', () => {
+  currentQuoteRef = null;
+  $('#inputQuoteBar').style.display = 'none';
 });
 
 $('#ctxMultiSelect').addEventListener('click', () => {
@@ -2217,8 +2334,18 @@ refreshTimer = setInterval(() => refreshConversations(true), 5000);
 
 // ── 服务器设置读写 ───────────────────────────────────
 let serverSettings = {};
+let fileServerUrl = '';  // 图床公网 URL，用于判断直链
+
+function isFileServerUrl(url) {
+  if (!url || !fileServerUrl) return false;
+  try { return url.startsWith(fileServerUrl); }
+  catch { return false; }
+}
 async function loadServerSettings() {
-  try { serverSettings = await API('/api/settings'); }
+  try {
+    serverSettings = await API('/api/settings');
+    fileServerUrl = serverSettings._file_server_url || '';
+  }
   catch { serverSettings = {}; }
 }
 async function saveServerSetting(key, value) {

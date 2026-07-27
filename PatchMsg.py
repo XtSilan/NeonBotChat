@@ -22,6 +22,8 @@ _msg_member_role: dict = {}
 _msg_username: dict = {}
 _msg_type: dict = {}
 _msg_elements: dict = {}
+_msg_ref_idx: dict = {}
+_msg_ref_target: dict = {}
 
 
 def _ensure_group_message_create_parser() -> None:
@@ -47,6 +49,14 @@ def _ensure_group_message_create_parser() -> None:
             _msg_member_role[msg_id] = data.get("author", {}).get("member_role", "")
             # 存储 username（优先于第三方 API）
             _msg_username[msg_id] = data.get("author", {}).get("username", "")
+            # 提取引用消息 ID
+            _msg_ref_idx[msg_id] = ""
+            _msg_ref_target[msg_id] = ""
+            for ext in data.get("message_scene", {}).get("ext", []):
+                if ext.startswith("msg_idx="):
+                    _msg_ref_idx[msg_id] = ext.split("msg_idx=", 1)[1]
+                elif ext.startswith("ref_msg_idx="):
+                    _msg_ref_target[msg_id] = ext.split("ref_msg_idx=", 1)[1]
             # 存储 message_type + msg_elements（用于引用回复等）
             _msg_type[msg_id] = data.get("message_type", 0)
             _msg_elements[msg_id] = data.get("msg_elements", [])
@@ -102,6 +112,16 @@ def get_msg_elements(msg_id: str) -> list:
     return _msg_elements.get(msg_id, [])
 
 
+def get_msg_ref_idx(msg_id: str) -> str:
+    """获取消息的 msg_idx（用于被其他消息引用）"""
+    return _msg_ref_idx.get(msg_id, "")
+
+
+def get_ref_msg_idx(msg_id: str) -> str:
+    """获取消息引用的目标消息 ID（ref_msg_idx）"""
+    return _msg_ref_target.get(msg_id, "")
+
+
 def get_username(msg_id: str) -> str:
     """获取原始 JSON 中的 author.username"""
     return _msg_username.get(msg_id, "")
@@ -127,4 +147,6 @@ __all__ = [
     "get_username",
     "get_msg_type",
     "get_msg_elements",
+    "get_msg_ref_idx",
+    "get_ref_msg_idx",
 ]
