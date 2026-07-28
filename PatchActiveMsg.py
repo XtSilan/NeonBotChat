@@ -94,6 +94,8 @@ async def send_group_msg(
     payload = {"msg_type": msg_type}
     if msg_type == 2:  # markdown
         payload["markdown"] = {"content": content}
+    elif msg_type == 8:  # 图文卡片
+        payload["card"] = json.loads(content) if isinstance(content, str) else content
     else:
         payload["content"] = content
     if message_reference:

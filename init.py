@@ -265,6 +265,7 @@ class MyClient(botpy.Client):
                 quoted_sender=quoted_sender,
                 quoted_content=quoted_content,
                 quote_thumbs=quote_thumbs_str,
+                quoted_ref_idx=get_ref_msg_idx(msg_id_for_att),
             )
 
             # 补上 @信息

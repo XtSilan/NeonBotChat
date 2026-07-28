@@ -535,6 +535,11 @@ async def api_send(request: Request):
     from database import mark_outgoing
     mark_outgoing(conv_id, content)
 
+    # 卡片消息用占位文本
+    display_content = content
+    if msg_type == 8:
+        display_content = "[卡片消息]"
+
     # 2) 调用 QQ API 发送
     try:
         result = await send_group_msg(conv_id, content, msg_type=msg_type, message_reference=message_reference)
@@ -584,7 +589,7 @@ async def api_send(request: Request):
         conversation_id=conv_id,
         sender_openid="self",
         sender_name=bot_name + " 🤖",
-        content=content,
+        content=display_content,
         direction="outgoing",
         msg_id=str(result.get("id", "")),
         msg_type=msg_type,
@@ -592,6 +597,7 @@ async def api_send(request: Request):
         quoted_sender=quoted_sender,
         quoted_content=quoted_content,
         quote_thumbs=quote_thumbs,
+        quoted_ref_idx=message_reference.get("message_id", "") if message_reference else "",
     )
 
     # 3) 广播给所有 WebUI 客户端
