@@ -70,6 +70,8 @@ async def send_group_msg(
     content: str,
     msg_type: int = 0,
     message_reference: dict = None,
+    keyboard_content: dict = None,
+    raw_payload: dict = None,
 ) -> dict:
     """
     主动发送群消息（绕过 botpy）
@@ -91,15 +93,22 @@ async def send_group_msg(
         "Authorization": f"{AUTH_TYPE} {token}",
         "Content-Type": "application/json",
     }
-    payload = {"msg_type": msg_type}
-    if msg_type == 2:  # markdown
-        payload["markdown"] = {"content": content}
-    elif msg_type == 8:  # 图文卡片
-        payload["card"] = json.loads(content) if isinstance(content, str) else content
+    if raw_payload is not None:
+        payload = {"msg_type": msg_type}
+        payload.update(raw_payload)
     else:
-        payload["content"] = content
+        payload = {"msg_type": msg_type}
+        if msg_type == 2:  # markdown
+            payload["markdown"] = {"content": content}
+        elif msg_type == 8:  # 图文卡片
+            payload["card"] = json.loads(content) if isinstance(content, str) else content
+        else:
+            payload["content"] = content
     if message_reference:
         payload["message_reference"] = message_reference
+    # keyboard 数据（由调用方通过额外参数传入）
+    if keyboard_content is not None:
+        payload["keyboard"] = keyboard_content
 
     async with aiohttp.ClientSession() as session:
         async with session.post(url, headers=headers, json=payload) as resp:

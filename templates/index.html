@@ -636,12 +636,52 @@ body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) 
   </div>
 </div>
 
+<!-- ═══════════ Keyboard Editor Modal ═══════════ -->
+<div class="modal-overlay" id="kbdModal">
+  <div class="modal-box" style="width:500px;">
+    <h3><img src="icons/button.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> 键盘消息</h3>
+    <textarea id="kbdContentInput" style="width:100%;height:80px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;resize:vertical;font-family:var(--font);font-size:0.9em;margin-bottom:8px;" placeholder="输入消息内容…"></textarea>
+    <label style="font-size:0.8em;color:var(--text-dim);">键盘 JSON（对应 keyboard 字段）</label>
+    <textarea id="kbdJsonInput" style="width:100%;height:160px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:0.78em;resize:vertical;outline:none;margin-top:4px;" placeholder='{&#10;  "content": {&#10;    "rows": [&#10;      {&#10;        "buttons": [&#10;          {&#10;            "id": "btn_1",&#10;            "render_data": { "label": "按钮", "style": 1 },&#10;            "action": { "type": 2, "permission": { "type": 2 }, "data": "/命令" }&#10;          }&#10;        ]&#10;      }&#10;    ]&#10;  }&#10;}' spellcheck="false"></textarea>
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="glass-btn" id="btnCancelKbd">取消</button>
+      <button class="glass-btn active" id="btnSendKbd">发送</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ Custom Message Modal ═══════════ -->
+<div class="modal-overlay" id="customMsgModal">
+  <div class="modal-box" style="width:500px;">
+    <h3><img src="icons/custom.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> 自定义消息</h3>
+    <textarea id="customMsgJson" style="width:100%;height:320px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:0.78em;resize:vertical;outline:none;margin:12px 0;" placeholder='{&#10;  "msg_type": 0,&#10;  "content": "Hello",&#10;  "keyboard": { ... },&#10;  "message_reference": { ... }&#10;}' spellcheck="false"></textarea>
+    <div class="modal-actions">
+      <button class="glass-btn" id="btnCancelCustom">取消</button>
+      <button class="glass-btn active" id="btnSendCustom">发送</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ Card Editor Modal ═══════════ -->
 <div class="modal-overlay" id="cardModal">
   <div class="modal-box" style="width:480px;">
     <h3><img src="icons/card.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> 卡片消息</h3>
-    <textarea id="cardJsonInput" style="width:100%;height:200px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:0.8em;resize:vertical;outline:none;margin:12px 0;" placeholder='{&#10;  "type": "tuwen",&#10;  "content": {&#10;    "title": "标题",&#10;    "description": "描述",&#10;    "pic_url": "https://...",&#10;    "url": "https://..."&#10;  }&#10;}' spellcheck="false"></textarea>
-    <div class="modal-actions">
+    <div style="display:flex;gap:8px;margin:12px 0;">
+      <button class="theme-btn active" id="cardTypeTuwen" onclick="switchCardType('tuwen')">图文类型</button>
+      <button class="theme-btn" id="cardTypeOther" onclick="switchCardType('other')">其他类型</button>
+    </div>
+    <!-- 图文类型表单 -->
+    <div id="cardFormTuwen">
+      <input type="text" id="cardTitle" placeholder="卡片标题" autocomplete="off" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;margin-bottom:8px;">
+      <input type="text" id="cardDesc" placeholder="卡片简介" autocomplete="off" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;margin-bottom:8px;">
+      <input type="text" id="cardPicUrl" placeholder="介绍图地址 (https://...)" autocomplete="off" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;margin-bottom:8px;">
+      <input type="text" id="cardJumpUrl" placeholder="跳转 URL (https://...)" autocomplete="off" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;margin-bottom:8px;">
+    </div>
+    <!-- 其他类型 JSON 编辑器 -->
+    <div id="cardFormOther" style="display:none;">
+      <textarea id="cardJsonInput" style="width:100%;height:180px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:0.8em;resize:vertical;outline:none;" placeholder='{&#10;  "type": "...",&#10;  ...&#10;}' spellcheck="false"></textarea>
+    </div>
+    <div class="modal-actions" style="margin-top:12px;">
       <button class="glass-btn" id="btnCancelCard">取消</button>
       <button class="glass-btn active" id="btnSendCard">发送</button>
     </div>
@@ -713,7 +753,7 @@ body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) 
       <div class="settings-tab" id="tab-about" style="display:none; text-align:center;">
         <h3>关于</h3>
         <p style="margin:12px 0;"><img src="icons/bot.svg" class="svg-icon" style="width:48px;height:48px;" alt=""></p>
-        <p style="font-size:1.2em;font-weight:700;margin:8px 0;">NeonBot v26.7.8</p>
+        <p style="font-size:1.2em;font-weight:700;margin:8px 0;">NeonBot v26.8.0</p>
         <a href="/api/readme" target="_blank" style="color:var(--accent);font-size:0.9em;display:block;margin-top:16px;"><img src="icons/documents.svg" class="svg-icon" style="width:14px;height:14px;" alt=""> 阅读 README.md</a>
         <p style="color:var(--text-dim);font-size:0.85em;margin-top:12px;">Copyright © 2026 Neon. All Rights Reserved.</p>
       </div>
@@ -803,9 +843,11 @@ body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) 
   <div class="ctx-item" id="richVideo" onclick="pickRichMedia('video')"><img src="icons/video.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 视频</div>
   <div class="ctx-item" id="richVoice" onclick="pickRichMedia('voice')"><img src="icons/audio.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 语音</div>
   <div class="ctx-item" id="richFileSend" onclick="pickRichMedia('file')"><img src="icons/documents.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 文件</div>
-  <div class="ctx-item" id="richCard" onclick="openCardEditor()"><img src="icons/card.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 卡片消息</div>
-  <div class="ctx-item" id="richMD" onclick="toggleMD()"><img src="icons/markdown.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> Markdown<span style="float:right;color:var(--text-dim);font-size:0.8em;" id="mdMenuStatus"></span></div>
+  <div class="ctx-item" id="richCard" onclick="openCardEditor()"><img src="icons/card.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 卡片</div>
+  <div class="ctx-item" id="richKbd" onclick="openKeyboardEditor()"><img src="icons/button.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 键盘</div>
+  <div class="ctx-item" id="richCustom" onclick="openCustomMsgEditor()" style="display:none;"><img src="icons/custom.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 自定义消息</div>
   <div class="ctx-sep"></div>
+  <div class="ctx-item" id="richMD" onclick="toggleMD()"><img src="icons/markdown.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> Markdown<span style="float:right;color:var(--text-dim);font-size:0.8em;" id="mdMenuStatus"></span></div>
   <div class="ctx-item" id="richExpand" onclick="toggleExpandInput()"><img src="icons/keyboard.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 展开输入<span style="float:right;color:var(--text-dim);font-size:0.8em;" id="expandMenuStatus"></span></div>
 </div>
 <input type="file" id="richFileInput" accept="image/*" style="display:none;">
@@ -1151,14 +1193,14 @@ function appendMessage(msg, scroll) {
   if (msg.recalled) {
     div.classList.remove('in', 'out');
     div.classList.add('center');
-    const isMedia = (msg.content || '').startsWith('[图片]') || (msg.content || '').startsWith('[视频]') || (msg.content || '').startsWith('[语音]') || (msg.content || '').startsWith('[文件]');
-    div.innerHTML = `<div class="msg-bubble">你撤回了一条消息${isMedia ? '' : ` <span class="reedit-link" onclick="reeditMessageContent('${encodeURIComponent(msg.content || '')}', ${msg.msg_type || 0}, '${msg.quoted_ref_idx || ''}', '${(msg.quoted_sender || '').replace(/'/g, "\\'")}', '${(msg.quoted_content || '').replace(/'/g, "\\'")}')">重新编辑</span>`}</div>`;
+    const noReedit = ['[图片]','[视频]','[语音]','[文件]','[卡片消息]','[键盘]'].some(p => (msg.content || '').startsWith(p)) || (msg.msg_type == 8);
+    div.innerHTML = `<div class="msg-bubble">你撤回了一条消息${noReedit ? '' : ` <span class="reedit-link" onclick="reeditMessageContent('${encodeURIComponent(msg.content || '')}', ${msg.msg_type || 0}, '${msg.quoted_ref_idx || ''}', '${(msg.quoted_sender || '').replace(/'/g, "\\'")}', '${(msg.quoted_content || '').replace(/'/g, "\\'")}')">重新编辑</span>`}</div>`;
     $messages.appendChild(div);
     if (scroll) scrollBottom();
     return;
   }
 
-  const placeholders = ['[富媒体文件]', '[图片]', '[视频]', '[语音]', '[文件]', '[表情]', '[卡片消息]'];
+  const placeholders = ['[富媒体文件]', '[图片]', '[视频]', '[语音]', '[文件]', '[表情]', '[卡片消息]', '[键盘]', '[自定义消息]'];
   const isPlaceholder = !attachHtml && placeholders.includes(msg.content);
 
   div.innerHTML = `
@@ -1392,28 +1434,110 @@ function updateMdToggle() {
 }
 $('#mdCheckbox').addEventListener('change', updateMdToggle);
 
+// ── 自定义消息 ────────────────────────────────────────
+function openCustomMsgEditor() {
+  $('#richMenu').style.display = 'none';
+  $('#customMsgModal').classList.add('show');
+  $('#customMsgJson').focus();
+}
+$('#btnCancelCustom').addEventListener('click', () => $('#customMsgModal').classList.remove('show'));
+$('#customMsgModal').addEventListener('click', (e) => { if (e.target === $('#customMsgModal')) $('#customMsgModal').classList.remove('show'); });
+$('#btnSendCustom').addEventListener('click', async () => {
+  const jsonStr = $('#customMsgJson').value.trim();
+  if (!jsonStr) return;
+  if (!currentConv) { showToast('⚠ 请先选择一个群聊'); return; }
+  let payload;
+  try { payload = JSON.parse(jsonStr); } catch (e) { showToast('⚠ JSON 格式错误'); return; }
+  payload.conv_id = currentConv;
+  $('#customMsgModal').classList.remove('show');
+  try {
+    const r = await API('/api/send-raw', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (r.error) { showToast('⚠ ' + r.error); }
+    else { showToast('✅ 已发送'); }
+  } catch (e) { showToast('⚠ 网络错误: ' + e.message); }
+});
+
+// ── 键盘消息 ──────────────────────────────────────────
+function openKeyboardEditor() {
+  $('#richMenu').style.display = 'none';
+  $('#kbdModal').classList.add('show');
+  $('#kbdContentInput').focus();
+}
+
+$('#btnCancelKbd').addEventListener('click', () => $('#kbdModal').classList.remove('show'));
+$('#kbdModal').addEventListener('click', (e) => { if (e.target === $('#kbdModal')) $('#kbdModal').classList.remove('show'); });
+
+$('#btnSendKbd').addEventListener('click', async () => {
+  const msg = $('#kbdContentInput').value.trim();
+  if (!msg) { showToast('⚠ 请输入消息内容'); return; }
+  if (!currentConv) { showToast('⚠ 请先选择一个群聊'); return; }
+
+  const kbdStr = $('#kbdJsonInput').value.trim();
+  let kbdObj = null;
+  if (kbdStr) {
+    try { kbdObj = JSON.parse(kbdStr); } catch (e) { showToast('⚠ 键盘 JSON 格式错误'); return; }
+  }
+
+  $('#kbdModal').classList.remove('show');
+  const body = { conv_id: currentConv, content: msg, msg_type: 2 };
+  if (kbdObj) body.keyboard = kbdObj;
+
+  try {
+    const r = await API('/api/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (r.error) { showToast('⚠ ' + r.error); }
+    else { showToast('✅ 键盘消息已发送'); }
+  } catch (e) { showToast('⚠ 网络错误: ' + e.message); }
+});
+
 // ── 卡片消息 ──────────────────────────────────────────
+let cardType = 'tuwen';
+
 function openCardEditor() {
   $('#richMenu').style.display = 'none';
   $('#cardModal').classList.add('show');
-  $('#cardJsonInput').focus();
+  switchCardType('tuwen');
+  $('#cardTitle').focus();
 }
+
+function switchCardType(type) {
+  cardType = type;
+  $('#cardTypeTuwen').classList.toggle('active', type === 'tuwen');
+  $('#cardTypeOther').classList.toggle('active', type === 'other');
+  $('#cardFormTuwen').style.display = type === 'tuwen' ? '' : 'none';
+  $('#cardFormOther').style.display = type === 'other' ? '' : 'none';
+  if (type === 'tuwen') $('#cardTitle').focus();
+  else $('#cardJsonInput').focus();
+}
+
 $('#btnCancelCard').addEventListener('click', () => $('#cardModal').classList.remove('show'));
 $('#cardModal').addEventListener('click', (e) => { if (e.target === $('#cardModal')) $('#cardModal').classList.remove('show'); });
-$('#cardJsonInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') $('#cardModal').classList.remove('show');
-});
 
 $('#btnSendCard').addEventListener('click', async () => {
-  const jsonStr = $('#cardJsonInput').value.trim();
-  if (!jsonStr) return;
   if (!currentConv) { showToast('⚠ 请先选择一个群聊'); return; }
 
-  try {
-    JSON.parse(jsonStr); // 验证 JSON 格式
-  } catch (e) {
-    showToast('⚠ JSON 格式错误');
-    return;
+  let jsonStr;
+  if (cardType === 'tuwen') {
+    const title = $('#cardTitle').value.trim();
+    const desc = $('#cardDesc').value.trim();
+    const picUrl = $('#cardPicUrl').value.trim();
+    const jumpUrl = $('#cardJumpUrl').value.trim();
+    if (!title) { showToast('⚠ 请填写卡片标题'); return; }
+    jsonStr = JSON.stringify({
+      type: 'tuwen',
+      content: { title, description: desc, pic_url: picUrl, url: jumpUrl }
+    });
+  } else {
+    jsonStr = $('#cardJsonInput').value.trim();
+    if (!jsonStr) return;
+    try { JSON.parse(jsonStr); } catch (e) { showToast('⚠ JSON 格式错误'); return; }
   }
 
   $('#cardModal').classList.remove('show');
@@ -2020,7 +2144,7 @@ async function refreshStatus() {
     const info = await API('/api/system-info');
     $sc.innerHTML = `
       <div style="text-align:center;margin-bottom:12px;">
-        <span style="font-size:1.1em;font-weight:700;"><img src="icons/bot.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> NeonBotChat v26.7.8</span>
+        <span style="font-size:1.1em;font-weight:700;"><img src="icons/bot.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> NeonBotChat v26.8.0</span>
       </div>
       <div class="stat-card">
         <div class="stat-label"><img src="icons/system.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 系统</div>
@@ -2312,8 +2436,8 @@ $('#btnBatchDelete').addEventListener('click', async () => {
 function handleRecallMessage(data) {
   const el = document.querySelector(`.msg-row[data-msg-id="${data.id}"]`);
   if (el) {
-    const isMedia2 = (data.content || '').startsWith('[图片]') || (data.content || '').startsWith('[视频]') || (data.content || '').startsWith('[语音]') || (data.content || '').startsWith('[文件]');
-    el.innerHTML = `<div class="msg-bubble">你撤回了一条消息${isMedia2 ? '' : ` <span class="reedit-link" onclick="reeditMessageContent('${encodeURIComponent(data.content || '')}', ${data.msg_type || 0}, '${data.quoted_ref_idx || ''}', '${(data.quoted_sender || '').replace(/'/g, "\\'")}', '${(data.quoted_content || '').replace(/'/g, "\\'")}')">重新编辑</span>`}</div>`;
+    const noReedit2 = ['[图片]','[视频]','[语音]','[文件]','[卡片消息]','[键盘]'].some(p => (data.content || '').startsWith(p)) || (data.msg_type == 8);
+    el.innerHTML = `<div class="msg-bubble">你撤回了一条消息${noReedit2 ? '' : ` <span class="reedit-link" onclick="reeditMessageContent('${encodeURIComponent(data.content || '')}', ${data.msg_type || 0}, '${data.quoted_ref_idx || ''}', '${(data.quoted_sender || '').replace(/'/g, "\\'")}', '${(data.quoted_content || '').replace(/'/g, "\\'")}')">重新编辑</span>`}</div>`;
     el.classList.add('center');
     el.classList.remove('in', 'out');
     el.removeEventListener('contextmenu', onMsgContextMenu);
@@ -2434,6 +2558,9 @@ async function loadServerSettings() {
   try {
     serverSettings = await API('/api/settings');
     fileServerUrl = serverSettings._file_server_url || '';
+    if (serverSettings._developer_mode) {
+      $('#richCustom').style.display = '';
+    }
   }
   catch { serverSettings = {}; }
 }

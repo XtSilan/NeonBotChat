@@ -6,6 +6,7 @@ secret: "你的AppSecret"
 webui-port: 36336          # WebUI 端口，默认 8080
 enable-public: false       # true = 0.0.0.0 允许外网访问
 webui-password: ""         # 访问密码，留空则不启用密码保护
+developerMode: False        # True 启用开发者模式（显示自定义消息等）
 
 # ── 图床服务器连接（可选，用于富媒体发送）──
 # 图床本身的完整配置在 file_server/config.yaml

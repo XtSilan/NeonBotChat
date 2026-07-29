@@ -352,6 +352,8 @@ async def api_get_settings():
     _raw = _read_cfg(os.path.join(os.path.dirname(__file__), "config.yaml"))
     fs = (_raw or {}).get("file-server", {})
     data["_file_server_url"] = fs.get("public-url", "").rstrip("/")
+    dev_mode = (_raw or {}).get("developerMode", False)
+    data["_developer_mode"] = dev_mode if isinstance(dev_mode, bool) else str(dev_mode).lower() == "true"
     return data
 
 
@@ -515,6 +517,38 @@ async def api_messages(conv_id: str, limit: int = 50, before: int = 0):
     return {"messages": msgs}
 
 
+@app.post("/api/send-raw")
+async def api_send_raw(request: Request):
+    """发送自定义消息（前端直接提供完整 payload）"""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid json"}, status_code=400)
+
+    conv_id: str = body.pop("conv_id", "")
+    if not conv_id:
+        return JSONResponse({"error": "conv_id 不能为空"}, status_code=400)
+
+    from PatchActiveMsg import send_group_msg
+    msg_type = body.get("msg_type", 0)
+    result = await send_group_msg(conv_id, "", msg_type=msg_type, raw_payload=body)
+
+    if result.get("code") or result.get("err_code"):
+        err_msg = result.get("message", "") or "未知错误"
+        return JSONResponse({"error": f"发送失败：{err_msg}"}, status_code=400)
+
+    from database import save_message, bot_name
+    saved = await save_message(
+        conversation_id=conv_id, sender_openid="self",
+        sender_name=bot_name + " 🤖", content="[自定义消息]",
+        direction="outgoing",
+        msg_id=str(result.get("id", "")),
+        msg_type=msg_type,
+    )
+    await manager.broadcast({"type": "new_message", "data": saved})
+    return {"ok": True, "message": saved, "qq_result": result}
+
+
 @app.post("/api/send")
 async def api_send(request: Request):
     try:
@@ -526,6 +560,7 @@ async def api_send(request: Request):
     content: str = body.get("content", "")
     msg_type: int = body.get("msg_type", 0)
     message_reference: dict = body.get("message_reference", None)
+    keyboard_content: dict = body.get("keyboard", None)
     quote_thumbs: str = body.get("quote_thumbs", "")
 
     if not conv_id or not content.strip():
@@ -535,14 +570,16 @@ async def api_send(request: Request):
     from database import mark_outgoing
     mark_outgoing(conv_id, content)
 
-    # 卡片消息用占位文本
+    # 特殊消息用占位文本
     display_content = content
     if msg_type == 8:
         display_content = "[卡片消息]"
+    elif keyboard_content is not None:
+        display_content = "[键盘] " + content
 
     # 2) 调用 QQ API 发送
     try:
-        result = await send_group_msg(conv_id, content, msg_type=msg_type, message_reference=message_reference)
+        result = await send_group_msg(conv_id, content, msg_type=msg_type, message_reference=message_reference, keyboard_content=keyboard_content)
         # 检查 QQ API 是否返回了错误
         if result.get("code") or result.get("err_code") or result.get("error"):
             err_msg = result.get("message", "") or result.get("msg", "") or result.get("error", "") or "未知错误"
