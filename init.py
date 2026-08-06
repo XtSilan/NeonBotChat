@@ -53,6 +53,10 @@ CLIENT_SECRET = config["secret"]
 
 _log = botpy_logging.get_logger("NeonBotChat")
 
+# 日志环形缓冲（供 WebUI「日志」页读取，保留最近 500 条）
+from LogBuffer import install as install_log_buffer
+install_log_buffer()
+
 # 延迟导入 Web 层（确保数据库先初始化）
 # 这里只是声明，实际在 main() 里导入
 
@@ -274,6 +278,16 @@ class MyClient(botpy.Client):
             if is_bot_mentioned(mentions):
                 saved["is_at"] = True
 
+            # 附带会话隐藏状态（前端据此决定是否插入会话列表）
+            try:
+                from database import get_db as _get_db
+                _c = _get_db()
+                _r = _c.execute("SELECT hidden FROM conversations WHERE id = ?", (group_id,)).fetchone()
+                saved["conversation_hidden"] = bool(_r and _r["hidden"])
+                _c.close()
+            except Exception:
+                saved["conversation_hidden"] = False
+
             # 推送到 WebUI
             push_bot_message({"type": "new_message", "data": saved})
 
@@ -320,15 +334,15 @@ async def main():
     from web_server import app, pump_bot_messages
 
     # 1) 初始化数据库
-    print("[NeonBot] 初始化数据库…")
+    _log.info("[NeonBot] 初始化数据库…")
     init_db()
-    print("[NeonBot] 数据库就绪 ✓")
+    _log.info("[NeonBot] 数据库就绪 ✓")
 
     # 2) 启动 bot 线程
-    print(f"[NeonBot] 启动 Bot (AppID={APP_ID})…")
+    _log.info(f"[NeonBot] 启动 Bot (AppID={APP_ID})…")
     bot_thread = threading.Thread(target=run_bot, name="qqbot", daemon=True)
     bot_thread.start()
-    print("[NeonBot] Bot 线程已启动 ✓")
+    _log.info("[NeonBot] Bot 线程已启动 ✓")
 
     # 3) 启动消息泵（后台任务，转发 bot 消息到 WebSocket）
     asyncio.create_task(pump_bot_messages())
@@ -341,14 +355,16 @@ async def main():
     if pwd:
         import web_server
         web_server.WEBUI_PASSWORD = pwd
-        print(f"[NeonBot] WebUI 密码保护已启用")
-    print(f"[NeonBot] WebUI → http://{webui_host}:{webui_port}")
+        _log.info("[NeonBot] WebUI 密码保护已启用")
+    _log.info(f"[NeonBot] WebUI → http://{webui_host}:{webui_port}")
     config_obj = uvicorn.Config(
         app,
         host=webui_host,
         port=webui_port,
         log_level="info",
         access_log=False,
+        # log_config=None → uvicorn 不执行 dictConfig（否则会清掉 LogBuffer 挂的 root handlers）
+        log_config=None,
     )
     server = uvicorn.Server(config_obj)
     await server.serve()
@@ -362,4 +378,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n[NeonBot] 已退出")
+        _log.info("[NeonBot] 已退出")

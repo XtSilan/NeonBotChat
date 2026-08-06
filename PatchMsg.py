@@ -5,7 +5,6 @@ Adds missing GROUP_MESSAGE_CREATE parser.
 ⚠️ 严格遵循 GroupMessage(api, event_id, data) 签名
 """
 
-import json
 from typing import Any, Dict
 
 import botpy
@@ -61,8 +60,14 @@ def _ensure_group_message_create_parser() -> None:
             _msg_type[msg_id] = data.get("message_type", 0)
             _msg_elements[msg_id] = data.get("msg_elements", [])
 
-            logger.info("[QQOfficial] 📥 收到消息 JSON:\n%s",
-                         json.dumps(payload, ensure_ascii=False, indent=2))
+            _author = data.get("author", {}) or {}
+            logger.info(
+                "📥 收到来自 %s 的 %s(%s) 的消息: %s",
+                data.get("group_openid", ""),
+                _author.get("username", "") or "未知成员",
+                _author.get("member_openid", ""),
+                data.get("content", "") or "[附件消息]",
+            )
 
             self._dispatch("group_message_create", group_message)
 

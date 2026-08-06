@@ -58,6 +58,9 @@ def init_db() -> None:
             last_direction TEXT DEFAULT '',
             last_message_time REAL DEFAULT 0,
             unread_count INTEGER DEFAULT 0,
+            pinned      INTEGER DEFAULT 0,         -- 置顶
+            muted       INTEGER DEFAULT 0,         -- 消息免打扰（未读气泡灰色）
+            hidden      INTEGER DEFAULT 0,         -- 不显示会话（搜索可找回）
             created_at  TEXT DEFAULT (datetime('now','localtime'))
         );
 
@@ -86,6 +89,15 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_msg_conv  ON messages(conversation_id, timestamp);
         CREATE INDEX IF NOT EXISTS idx_conv_time ON conversations(last_message_time DESC);
     """)
+    # 迁移：旧库补 pinned / muted / hidden 列
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(conversations)").fetchall()}
+    for col, ddl in (
+        ("pinned", "ALTER TABLE conversations ADD COLUMN pinned INTEGER DEFAULT 0"),
+        ("muted",  "ALTER TABLE conversations ADD COLUMN muted INTEGER DEFAULT 0"),
+        ("hidden", "ALTER TABLE conversations ADD COLUMN hidden INTEGER DEFAULT 0"),
+    ):
+        if col not in cols:
+            conn.execute(ddl)
     conn.commit()
     conn.close()
 
@@ -166,19 +178,38 @@ async def reset_unread(conv_id: str) -> None:
     await asyncio.to_thread(_do)
 
 
-async def get_conversations(limit: int = 50) -> list[dict]:
+async def get_conversations(limit: int = 50, include_hidden: bool = False) -> list[dict]:
     def _do():
         conn = get_db()
         rows = conn.execute("""
             SELECT id, name, type, avatar_url, last_message, last_sender, last_direction,
-                   unread_count, datetime(last_message_time) as last_time
+                   unread_count, pinned, muted, hidden, datetime(last_message_time) as last_time
             FROM conversations
-            ORDER BY last_message_time DESC
+            {where}
+            ORDER BY pinned DESC, last_message_time DESC
             LIMIT ?
-        """, (limit,)).fetchall()
+        """.format(where="" if include_hidden else "WHERE hidden = 0"), (limit,)).fetchall()
         conn.close()
         return [dict(r) for r in rows]
     return await asyncio.to_thread(_do)
+
+
+async def set_conversation_flags(conv_id: str, pinned=None, muted=None, hidden=None) -> None:
+    """更新会话状态字段（置顶 / 免打扰 / 隐藏），只更新传了的值"""
+    sets, args = [], []
+    for col, val in (("pinned", pinned), ("muted", muted), ("hidden", hidden)):
+        if val is not None:
+            sets.append(f"{col} = ?")
+            args.append(1 if val else 0)
+    if not sets:
+        return
+    args.append(conv_id)
+    def _do():
+        conn = get_db()
+        conn.execute(f"UPDATE conversations SET {', '.join(sets)} WHERE id = ?", args)
+        conn.commit()
+        conn.close()
+    await asyncio.to_thread(_do)
 
 
 async def get_conversation(conv_id: str) -> Optional[dict]:
@@ -268,6 +299,43 @@ async def get_messages(conversation_id: str, limit: int = 50, before_id: int = 0
 async def get_recent_messages(conversation_id: str, limit: int = 20) -> list[dict]:
     """拿最近 N 条（倒序、再反转成正序）"""
     return await get_messages(conversation_id, limit=limit, before_id=0)
+
+
+async def search_messages(q: str, limit: int = 50, conv_id: str = "") -> list[dict]:
+    """搜索消息内容（conv_id 为空则全局），返回带会话名的结果（按时间倒序）"""
+    def _do():
+        conn = get_db()
+        sql = """
+            SELECT m.id, m.conversation_id, c.name AS conv_name, m.sender_name,
+                   m.sender_avatar, m.content, m.msg_type, m.direction, m.timestamp
+            FROM messages m LEFT JOIN conversations c ON c.id = m.conversation_id
+            WHERE (m.content LIKE ? OR m.sender_name LIKE ? OR m.attachments LIKE ?) AND m.recalled = 0
+        """
+        args: list = [f"%{q}%"] * 3
+        if conv_id:
+            sql += " AND m.conversation_id = ?"
+            args.append(conv_id)
+        sql += " ORDER BY m.id DESC LIMIT ?"
+        args.append(limit)
+        rows = conn.execute(sql, args).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    return await asyncio.to_thread(_do)
+
+
+async def get_messages_around(conv_id: str, target_id: int, limit: int = 50) -> list[dict]:
+    """以某条消息为中心加载上下窗口（id 自增与时间顺序一致）"""
+    def _do():
+        conn = get_db()
+        half = max(limit // 2, 1)
+        rows = conn.execute("""
+            SELECT * FROM messages
+            WHERE conversation_id = ? AND id BETWEEN ? AND ?
+            ORDER BY id ASC
+        """, (conv_id, target_id - half, target_id + half)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    return await asyncio.to_thread(_do)
 
 
 async def clear_all_messages() -> None:

@@ -371,6 +371,13 @@ async def api_save_settings(request: Request):
     return {"ok": True}
 
 
+@app.get("/api/logs")
+async def api_logs(since: int = Query(0)):
+    """返回服务端日志（增量拉取，保留最近 500 条）"""
+    from LogBuffer import get_logs
+    return get_logs(since)
+
+
 @app.get("/api/system-info")
 async def api_system_info():
     """返回系统和 Bot 运行状态（使用 WMI 获取准确硬件信息）"""
@@ -450,8 +457,8 @@ async def api_status():
 
 
 @app.get("/api/conversations")
-async def api_conversations(limit: int = 50):
-    convs = await get_conversations(limit)
+async def api_conversations(limit: int = 50, include_hidden: bool = False):
+    convs = await get_conversations(limit, include_hidden=include_hidden)
     return {"conversations": convs}
 
 
@@ -476,20 +483,30 @@ async def api_add_conversation(request: Request):
 
 
 @app.patch("/api/conversations/{conv_id}")
-async def api_rename_conversation(conv_id: str, request: Request):
-    """修改会话备注名"""
+async def api_update_conversation(conv_id: str, request: Request):
+    """修改会话：备注名 / 置顶 / 免打扰 / 隐藏"""
     try:
         body = await request.json()
     except Exception:
         return JSONResponse({"error": "invalid json"}, status_code=400)
 
-    new_name = (body.get("name") or "").strip()
-    if not new_name:
-        return JSONResponse({"error": "name 不能为空"}, status_code=400)
+    from database import rename_conversation, set_conversation_flags
 
-    from database import rename_conversation
-    await rename_conversation(conv_id, new_name)
-    return {"ok": True, "id": conv_id, "name": new_name}
+    new_name = (body.get("name") or "").strip()
+    if new_name:
+        await rename_conversation(conv_id, new_name)
+
+    flags = {}
+    for key in ("pinned", "muted", "hidden"):
+        if key in body:
+            flags[key] = 1 if body[key] else 0
+    if flags:
+        await set_conversation_flags(conv_id, **flags)
+
+    if not new_name and not flags:
+        return JSONResponse({"error": "没有可更新的字段"}, status_code=400)
+
+    return {"ok": True, "id": conv_id, "name": new_name, **flags}
 
 
 @app.delete("/api/messages")
@@ -509,9 +526,24 @@ async def api_clear_messages(conv_id: str):
     return {"ok": True}
 
 
+@app.get("/api/search")
+async def api_search(q: str = "", limit: int = 50, conv_id: str = ""):
+    """消息内容搜索（conv_id 为空则全局）"""
+    from database import search_messages
+    q = q.strip()
+    if not q:
+        return {"results": []}
+    results = await search_messages(q, limit=limit, conv_id=conv_id.strip())
+    return {"results": results}
+
+
 @app.get("/api/messages/{conv_id}")
-async def api_messages(conv_id: str, limit: int = 50, before: int = 0):
-    msgs = await get_messages(conv_id, limit=limit, before_id=before)
+async def api_messages(conv_id: str, limit: int = 50, before: int = 0, around: int = 0):
+    from database import get_messages_around
+    if around:
+        msgs = await get_messages_around(conv_id, around, limit=limit)
+    else:
+        msgs = await get_messages(conv_id, limit=limit, before_id=before)
     # 标记已读
     await reset_unread(conv_id)
     return {"messages": msgs}

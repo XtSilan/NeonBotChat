@@ -100,6 +100,105 @@ body {
   background: var(--danger); color: #fff; font-size: 0.7em;
   padding: 1px 6px; border-radius: 10px; min-width: 20px; text-align: center;
 }
+.conv-item .badge.muted { background: #6f747b; }
+.conv-item.hidden-item { opacity: 0.55; }
+.conv-item .at-tag {
+  background: var(--danger); color: #fff; font-size: 0.65em;
+  padding: 0 4px; border-radius: 4px; margin-right: 4px;
+  font-weight: 700; vertical-align: 1px;
+}
+/* ── 消息日期分隔条 ───────────────────────────────── */
+.msg-date-divider {
+  text-align: center; margin: 16px 0 10px; font-size: 0.75em;
+  color: var(--text-dim); position: relative;
+}
+.msg-date-divider::before, .msg-date-divider::after {
+  content: ''; position: absolute; top: 50%; width: 28%; height: 1px;
+  background: rgba(255,255,255,0.12);
+}
+.msg-date-divider::before { left: 0; }
+.msg-date-divider::after { right: 0; }
+body.light .msg-date-divider::before, body.light .msg-date-divider::after { background: rgba(0,0,0,0.12); }
+
+/* ── 图片灯箱 ─────────────────────────────────────── */
+.lightbox { position: fixed; inset: 0; z-index: 500; display: none; align-items: center; justify-content: center; }
+.lightbox-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.88); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.lightbox img, .lightbox video {
+  position: relative; max-width: 92vw; max-height: 86vh;
+  border-radius: 8px; box-shadow: 0 10px 50px rgba(0,0,0,0.6);
+  transition: opacity 0.2s, transform 0.1s; user-select: none;
+  transform-origin: center;
+}
+.lightbox-close {
+  position: absolute; top: 16px; right: 20px; z-index: 2;
+  width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer;
+  background: rgba(255,255,255,0.12); color: #fff; font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+}
+.lightbox-close:hover { background: rgba(255,255,255,0.25); }
+.lightbox-nav {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
+  width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer;
+  background: rgba(255,255,255,0.12); color: #fff; font-size: 26px; line-height: 1;
+}
+.lightbox-nav:hover { background: rgba(255,255,255,0.25); }
+.lightbox-prev { left: 20px; }
+.lightbox-next { right: 20px; }
+.lightbox-counter {
+  position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 2;
+  color: rgba(255,255,255,0.85); font-size: 0.85em;
+  background: rgba(0,0,0,0.4); padding: 3px 12px; border-radius: 12px;
+}
+.lightbox-error {
+  position: relative; z-index: 2;
+  color: rgba(255,255,255,0.75); font-size: 0.95em;
+  background: rgba(255,255,255,0.08); padding: 10px 24px; border-radius: 10px;
+}
+.lightbox-zoom {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  z-index: 3; background: rgba(0,0,0,0.3); color: #fff;
+  border: 1px solid rgba(255,255,255,0.15);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  padding: 4px 14px; border-radius: 16px; font-size: 0.9em;
+  pointer-events: none; white-space: nowrap;
+}
+
+/* 搜索结果用户头像（加载失败回退搜索图标） */
+.conv-item .avatar .srch-avatar {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  border-radius: 50%; object-fit: cover; z-index: 2;
+}
+.conv-item .avatar .srch-avatar.failed { display: none; }
+
+/* 开关按钮（Switch） */
+.switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .slider {
+  position: absolute; cursor: pointer; inset: 0;
+  background: rgba(255,255,255,0.15); border-radius: 22px; transition: 0.2s;
+}
+.switch .slider::before {
+  content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px;
+  background: #fff; border-radius: 50%; transition: 0.2s;
+}
+.switch input:checked + .slider { background: #3b82f6; }
+.switch input:checked + .slider::before { transform: translateX(18px); }
+body.light .switch .slider { background: rgba(0,0,0,0.2); }
+body.light .switch input:checked + .slider { background: #3b82f6; }
+
+/* 搜索定位消息高亮 */
+.msg-row.hl .msg-bubble { animation: msgHl 2.5s ease; }
+@keyframes msgHl {
+  0% { box-shadow: 0 0 0 3px var(--accent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+/* 置顶会话高亮 */
+.conv-item.pinned {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.conv-item.pinned:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.conv-item.pinned.active { background: color-mix(in srgb, var(--accent) 20%, transparent); }
 .sidebar-footer {
   padding: 14px 20px; border-top: 1px solid var(--border);
   font-size: 0.95em; color: var(--text-dim);
@@ -165,8 +264,24 @@ body {
   display: flex; flex-direction: column; gap: 4px;
   position: relative; z-index: 1;
 }
-.msg-row { display: flex; margin-bottom: 12px; }
+.msg-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
 .msg-row.center { justify-content: center; }
+.msg-row.out { flex-direction: row-reverse; }
+.msg-avatar-col { width: 36px; flex-shrink: 0; display: flex; justify-content: center; }
+.msg-avatar-img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; cursor: pointer; }
+.msg-avatar-fallback {
+  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.95em; font-weight: 600;
+}
+.msg-body { min-width: 0; max-width: 72%; display: flex; flex-direction: column; align-items: flex-start; }
+.msg-row.out .msg-body { align-items: flex-end; }
+.msg-meta {
+  font-size: 0.78em; color: var(--text-dim); margin-bottom: 3px; font-weight: 600;
+  display: flex; align-items: center; gap: 6px; padding: 0 2px;
+}
+.msg-meta.meta-self { color: var(--text-dim); }
 .msg-row.center .msg-bubble { background: rgba(58, 59, 64, 0.7); color: var(--text-dim); font-size: 0.85em; border-radius: 8px; padding: 6px 14px; }
 .reedit-link { color: var(--accent); cursor: pointer; font-style: normal; }
 .reedit-link:hover { color: #7e8fff; }
@@ -180,37 +295,49 @@ body {
 .msg-bubble h6 { font-size: 0.85em; margin: 2px 0; font-weight: 600; color: var(--text-dim); }
 .msg-bubble code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px; font-size: 0.9em; }
 .msg-bubble .katex-display { margin: 6px 0; }
-.msg-row.out { justify-content: flex-end; }
 .msg-bubble {
-  max-width: 65%; padding: 10px 14px; border-radius: 12px;
+  max-width: 100%; padding: 10px 14px; border-radius: 12px;
   font-size: 0.95em; line-height: 1.5; word-break: break-word;
 }
 .msg-row.in .msg-bubble { background: var(--bubble-in); border-top-left-radius: 4px; }
 .msg-row.out .msg-bubble { background: var(--bubble-out); color: #fff; border-top-right-radius: 4px; }
-.msg-sender { font-size: 0.78em; color: #e4e5e7; margin-bottom: 2px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
-.msg-sender.sender-self { color: #b8c7ff; justify-content: flex-end; }
-.msg-sender.role-owner, .msg-sender.role-群主 { color: #f0c060; }
-.msg-sender.role-admin, .msg-sender.role-管理员 { color: #8ab4ff; }
-.msg-sender img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }
+/* 纯媒体消息（图片/视频/语音）无气泡底 */
+.msg-bubble.media-only { background: transparent !important; padding: 0; border-radius: 0; }
+.msg-bubble.media-only .img-placeholder { background: transparent; margin-bottom: 0; }
+.msg-bubble.media-only .msg-image, .msg-bubble.media-only .msg-video { margin-bottom: 0; }
 .admin-badge {
-  display: inline-block; font-size: 0.75em; font-weight: 500;
-  background: rgba(79, 126, 245, 0.2); color: #8ab4ff;
+  display: inline-block; font-size: 0.75em; font-weight: 600;
+  background: #1b3a4e; color: #0066cc;
   padding: 2px 7px; border-radius: 4px; margin-left: 4px;
   vertical-align: middle;
-  box-shadow: 0 0 6px rgba(79, 126, 245, 0.3);
+  box-shadow: 0 0 8px rgba(0, 102, 204, 0.35);
 }
 .owner-badge {
-  display: inline-block; font-size: 0.75em; font-weight: 500;
-  background: rgba(240, 160, 64, 0.2); color: #f0c060;
+  display: inline-block; font-size: 0.75em; font-weight: 600;
+  background: #4e3624; color: #d7793a;
   padding: 2px 7px; border-radius: 4px; margin-left: 4px;
   vertical-align: middle;
-  box-shadow: 0 0 6px rgba(240, 160, 64, 0.3);
+  box-shadow: 0 0 8px rgba(215, 121, 58, 0.35);
 }
 .media-placeholder { color: var(--text-dim); font-style: italic; }
 .img-placeholder {
+  position: relative;
   background: rgba(255,255,255,0.05); border-radius: 8px;
   display: inline-block; margin-bottom: 6px; overflow: hidden;
   line-height: 0; font-size: 0;
+}
+/* 视频封面播放按钮（圆形 + ▶） */
+.video-play-btn {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 44px; height: 44px; border-radius: 50%;
+  background: rgba(0,0,0,0.55); border: 2px solid rgba(255,255,255,0.85);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; z-index: 3;
+}
+.video-play-btn::after {
+  content: ''; width: 0; height: 0;
+  border-left: 13px solid #fff; border-top: 8px solid transparent; border-bottom: 8px solid transparent;
+  margin-left: 3px;
 }
 .asr-text {
   font-size: 0.82em; color: var(--text-dim); margin-bottom: 4px;
@@ -300,7 +427,7 @@ body {
 .input-quote-sender { font-size: 0.78em; color: var(--accent); font-weight: 600; }
 .input-quote-text { font-size: 0.82em; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .input-quote-thumb { display: inline-flex; flex-shrink: 0; }
-.input-quote-close { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 1em; padding: 2px 4px; flex-shrink: 0; }
+.input-quote-close { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 1em; padding: 2px 4px; flex-shrink: 0; display: flex; align-items: center; }
 .input-quote-close:hover { color: var(--danger); }
 
 /* ── Rich Media Popup ────────────────────────── */
@@ -359,18 +486,28 @@ body {
 
 /* ── Toast ───────────────────────────────────── */
 .toast-container {
-  position: fixed; top: 16px; right: 16px; z-index: 999;
-  display: flex; flex-direction: column; gap: 8px;
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  z-index: 999; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  pointer-events: none;
 }
 .toast {
-  background: var(--accent); color: #fff; padding: 10px 18px;
-  border-radius: 8px; font-size: 0.9em; font-weight: 600;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  background: rgba(0, 0, 0, 0.42); color: #fff;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.15);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.3);
   animation: toastIn 0.25s ease, toastOut 0.25s ease 1.5s forwards;
-  max-width: 300px;
+  width: 116px; height: 116px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 12px; text-align: center;
 }
-@keyframes toastIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
-@keyframes toastOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(40px); } }
+.toast .toast-icon { margin-bottom: 8px; }
+.toast .toast-icon img { width: 36px; height: 36px; }
+.toast .toast-text { font-size: 0.82em; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,0.6); line-height: 1.35; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes toastOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(8px); } }
+/* 浅色模式下 toast 仍是深灰毛玻璃底，图标需保持反色（白色） */
+body.light .toast .svg-icon { filter: invert(1); }
 
 /* ── Batch Action Bar ────────────────────────── */
 .batch-bar {
@@ -392,6 +529,7 @@ body {
 .select-mode .msg-row.selected .msg-checkbox {
   background: var(--accent); border-color: var(--accent); color: #fff;
 }
+.select-mode .msg-row.selected .msg-checkbox .svg-icon { filter: invert(1) !important; }
 
 /* ── Status Cards ───────────────────────────── */
 .stat-card {
@@ -441,7 +579,7 @@ body {
 /* ── Settings Nav ────────────────────────────── */
 .settings-nav {
   width: 140px; flex-shrink: 0;
-  background: rgba(30, 31, 35, 0.75);
+  background: rgba(30, 31, 35, 0.3);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-right: 1px solid rgba(255,255,255,0.06);
@@ -457,6 +595,8 @@ body {
   color: var(--text); background: rgba(255,255,255,0.06);
   border-left-color: var(--accent);
 }
+/* 关于页内容上下居中 */
+#tab-about { height: 100%; display: flex; flex-direction: column; justify-content: center; }
 
 /* ── Context Menu ────────────────────────────── */
 .context-menu {
@@ -480,7 +620,7 @@ body {
 
 /* ── Modal ────────────────────────────────────── */
 .modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  position: fixed; inset: 0; background: rgba(0,0,0,0.25);
   display: flex; align-items: center; justify-content: center;
   z-index: 100; opacity: 0; pointer-events: none;
   transition: opacity 0.2s;
@@ -488,7 +628,7 @@ body {
 #confirmDialog { z-index: 200; }
 .modal-overlay.show { opacity: 1; pointer-events: auto; }
 .modal-box {
-  background: rgba(30, 31, 35, 0.85); border-radius: 12px;
+  background: rgba(30, 31, 35, 0.45); border-radius: 12px;
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
   padding: 24px; width: 380px; max-width: 90vw;
   border: 1px solid var(--border);
@@ -526,7 +666,7 @@ body.light .chat-area.has-bg .msg-row.in .msg-bubble { background: rgba(224, 225
 body.light .msg-row.center .msg-bubble { background: rgba(200, 200, 210, 0.5); }
 body.light .chat-header.glass { background: rgba(232, 233, 237, 0.55); }
 body.light .input-area { background: rgba(232, 233, 237, 0.55); }
-body.light .settings-nav { background: rgba(232, 233, 237, 0.75); }
+body.light .settings-nav { background: rgba(232, 233, 237, 0.5); }
 body.light .chat-area.has-bg { background: transparent; }
 body.light .sidebar { background: rgba(232, 233, 237, 0.5); }
 body.light .admin-badge { background: rgba(40, 70, 180, 0.18); color: #2a48b0; box-shadow: 0 0 5px rgba(40, 70, 180, 0.25); }
@@ -545,9 +685,12 @@ body.light .glass-btn.danger:hover { background: rgba(192,57,43,0.12); }
 body.light .theme-btn { background: rgba(0,0,0,0.06); color: #1a1b1e; }
 body.light .theme-btn:hover { background: rgba(0,0,0,0.12); }
 body.light .theme-btn.active { background: var(--accent); color: #fff; }
-body.light .modal-box { background: rgba(240, 241, 244, 0.85); }
+body.light .modal-box { background: rgba(240, 241, 244, 0.6); }
+body.light #logsContent { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.08); }
 body.light .img-placeholder { background: rgba(0,0,0,0.06); }
-body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) { color: #1a1b1e; }
+body.light .msg-meta { color: #808080; }
+body.light .admin-badge { background: #c4e3f7; color: #0099ff; }
+body.light .owner-badge { background: #f7dfcd; color: #ff8d40; }
 
 /* ── Responsive ───────────────────────────────── */
 @media (max-width: 768px) {
@@ -573,7 +716,7 @@ body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) 
 <!-- ═══════════ Sidebar ═══════════ -->
 <aside class="sidebar">
   <div class="sidebar-header">
-    <span class="logo"><img src="icons/bot.svg" class="svg-icon" style="width:22px;height:22px;" alt=""> NeonBot</span>
+    <span class="logo"><img src="icons/bot.svg" class="svg-icon" style="width:22px;height:22px;" alt=""> BotChat</span>
     <span class="status" id="botStatus">● 在线</span>
     <button class="btn-add" id="btnAddConv" title="添加群聊"><img src="icons/add_group.svg" class="svg-icon" style="width:18px;height:18px;" alt=""></button>
   </div>
@@ -608,6 +751,11 @@ body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) 
 <div class="modal-overlay" id="renameConvModal">
   <div class="modal-box">
     <h3><img src="icons/settings.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 群聊设置</h3>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;background:rgba(0,0,0,0.12);border-radius:8px;padding:8px 10px;">
+      <span style="font-size:0.8em;color:var(--text-dim);flex-shrink:0;">群 OpenID</span>
+      <code id="convOpenIdText" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.78em;color:var(--text);user-select:all;" title="点击可全选"></code>
+      <button class="glass-btn" id="btnCopyConvId" style="padding:3px 10px;font-size:0.8em;"><img src="icons/copy.svg" class="svg-icon" style="width:14px;height:14px;" alt=""> 复制</button>
+    </div>
     <label for="renameConvInput">备注名</label>
     <div style="display:flex; gap:8px;">
       <input type="text" id="renameConvInput" placeholder="输入新备注名…" autocomplete="off" style="flex:1; margin-bottom:0;">
@@ -618,8 +766,24 @@ body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) 
       <span style="font-size:0.9em; color:var(--text-dim);">清空聊天记录</span>
       <button class="glass-btn danger" id="btnClearHistory" style="color:var(--danger);"><img src="icons/delete.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 清空</button>
     </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;">
+      <span style="font-size:0.9em; color:var(--text-dim);">查找聊天记录</span>
+      <button class="glass-btn" id="btnOpenMsgSearch"><img src="icons/search.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 查找</button>
+    </div>
     <div class="modal-actions" style="margin-top:16px;">
       <button class="glass-btn" id="btnCancelRename">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 查找聊天记录 Modal ═══════════ -->
+<div class="modal-overlay" id="msgSearchModal" style="z-index:150;">
+  <div class="modal-box" style="width:480px; max-width:95vw;">
+    <h3><img src="icons/search.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 查找聊天记录</h3>
+    <input type="text" id="msgSearchInput" placeholder="搜索当前群聊…" autocomplete="off">
+    <div id="msgSearchResults" style="max-height:50vh; overflow-y:auto; margin-top:4px;"></div>
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="glass-btn" id="btnCloseMsgSearch">关闭</button>
     </div>
   </div>
 </div>
@@ -690,16 +854,17 @@ body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) 
 
 <!-- ═══════════ Settings Modal ═══════════ -->
 <div class="modal-overlay" id="settingsModal">
-  <div class="modal-box" style="display:flex; gap:0; padding:0; width:560px; max-width:95vw; overflow:hidden;">
+  <div class="modal-box" style="display:flex; gap:0; padding:0; width:720px; max-width:95vw; height:70vh; overflow:hidden;">
     <!-- 左侧导航 -->
     <div class="settings-nav" id="settingsNav">
       <div class="settings-nav-item active" data-tab="general"><img src="icons/settings.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 通用</div>
       <div class="settings-nav-item" data-tab="status"><img src="icons/system_status.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 状态</div>
+      <div class="settings-nav-item" data-tab="logs"><img src="icons/log.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 日志</div>
       <div class="settings-nav-item" data-tab="account"><img src="icons/security.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 账号与安全</div>
       <div class="settings-nav-item" data-tab="about"><img src="icons/bot.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 关于</div>
     </div>
     <!-- 右侧内容 -->
-    <div style="flex:1; padding:24px; overflow-y:auto; max-height:70vh;">
+    <div style="flex:1; min-width:0; padding:24px; overflow-y:auto;">
       <!-- 通用 -->
       <div class="settings-tab" id="tab-general">
         <h3 style="margin-bottom:12px;"><img src="icons/appearance.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 外观</h3>
@@ -718,6 +883,14 @@ body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) 
           <input type="range" id="bgOpacity" min="5" max="100" value="20" style="flex:1;">
           <span id="bgOpacityVal">20%</span>
         </label>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;">
+          <span style="font-size:0.9em;">桌面通知</span>
+          <label class="switch">
+            <input type="checkbox" id="chkDesktopNotify">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <p style="font-size:0.75em;color:var(--text-dim);margin-top:4px;">新消息系统通知，@我 时强提醒</p>
         <hr style="border-color:var(--border); margin:16px 0;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <span style="font-size:0.9em; color:var(--text-dim);">清空全部聊天记录</span>
@@ -729,13 +902,19 @@ body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) 
         <h3><img src="icons/system_status.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 运行状态</h3>
         <div id="statusContent" style="font-size:0.85em; color:var(--text-dim);">加载中…</div>
       </div>
+      <!-- 日志 -->
+      <div class="settings-tab" id="tab-logs" style="display:none;">
+        <h3 style="margin-bottom:8px;"><img src="icons/log.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 运行日志</h3>
+        <p style="font-size:0.8em;color:var(--text-dim);margin-bottom:8px;">最近 500 条服务端日志，每 2 秒自动刷新</p>
+        <div id="logsContent" style="height:calc(70vh - 130px);overflow-y:auto;background:rgba(0,0,0,0.12);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px;font-family:Consolas,Menlo,monospace;font-size:0.76em;line-height:1.65;white-space:pre-wrap;word-break:break-all;">加载中…</div>
+      </div>
       <!-- 账号与安全 -->
       <div class="settings-tab" id="tab-account" style="display:none;">
         <h3><img src="icons/bot.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 机器人信息</h3>
         <div style="display:flex;align-items:center;gap:14px;margin:16px 0;">
           <div class="bot-avatar-upload" id="botAvatarUpload" title="点击上传头像">
             <img id="botAvatarImg" style="display:none;width:100%;height:100%;border-radius:50%;object-fit:cover;">
-            <span id="botAvatarPlaceholder" style="font-size:1.8em;">🤖</span>
+            <span id="botAvatarPlaceholder"><img src="icons/bot.svg" class="svg-icon" style="width:28px;height:28px;" alt=""></span>
           </div>
           <div>
             <div style="font-weight:700;font-size:1.05em;" id="accountBotName">Bot</div>
@@ -753,7 +932,7 @@ body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) 
       <div class="settings-tab" id="tab-about" style="display:none; text-align:center;">
         <h3>关于</h3>
         <p style="margin:12px 0;"><img src="icons/bot.svg" class="svg-icon" style="width:48px;height:48px;" alt=""></p>
-        <p style="font-size:1.2em;font-weight:700;margin:8px 0;">NeonBot v26.8.0</p>
+        <p style="font-size:1.2em;font-weight:700;margin:8px 0;">NeonBot v28.8.2</p>
         <a href="/api/readme" target="_blank" style="color:var(--accent);font-size:0.9em;display:block;margin-top:16px;"><img src="icons/documents.svg" class="svg-icon" style="width:14px;height:14px;" alt=""> 阅读 README.md</a>
         <p style="color:var(--text-dim);font-size:0.85em;margin-top:12px;">Copyright © 2026 Neon. All Rights Reserved.</p>
       </div>
@@ -771,6 +950,14 @@ body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) 
   <div class="ctx-sep"></div>
   <div class="ctx-item" id="ctxRecall"><img src="icons/recall.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 撤回</div>
   <div class="ctx-item danger" id="ctxDelete"><img src="icons/delete.svg" class="svg-icon ctx-icon" style="width:16px;height:16px;" alt=""><img src="icons/delete_black.svg" class="svg-icon ctx-icon-hover" style="width:16px;height:16px;" alt=""> 删除</div>
+</div>
+
+<!-- ═══════════ Conversation Context Menu ═══════════ -->
+<div class="context-menu" id="convCtxMenu">
+  <div class="ctx-item" id="convCtxPin"><img src="icons/up.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 置顶</div>
+  <div class="ctx-item" id="convCtxMute"><img src="icons/donotdisturb.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 消息免打扰</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="convCtxHide"><img src="icons/hidden.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 不显示会话</div>
 </div>
 
 <!-- ═══════════ Batch Action Bar ═══════════ -->
@@ -808,6 +995,19 @@ body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) 
 <!-- ═══════════ Toast Container ═══════════ -->
 <div class="toast-container" id="toastContainer"></div>
 
+<!-- ═══════════ Image Lightbox ═══════════ -->
+<div class="lightbox" id="lightbox">
+  <div class="lightbox-backdrop" id="lightboxBackdrop"></div>
+  <button class="lightbox-close" id="lightboxClose" title="关闭 (Esc)"><img src="icons/close.svg" class="svg-icon" style="width:16px;height:16px;" alt=""></button>
+  <button class="lightbox-nav lightbox-prev" id="lightboxPrev" title="上一张 (←)">‹</button>
+  <img id="lightboxImg" alt="">
+  <video id="lightboxVideo" controls autoplay playsinline style="display:none;max-width:92vw;max-height:86vh;border-radius:8px;background:#000;box-shadow:0 10px 50px rgba(0,0,0,0.6);" preload="metadata"></video>
+  <div class="lightbox-error" id="lightboxError" style="display:none;">图片已过期</div>
+  <div class="lightbox-zoom" id="lightboxZoom" style="display:none;">100%</div>
+  <button class="lightbox-nav lightbox-next" id="lightboxNext" title="下一张 (→)">›</button>
+  <div class="lightbox-counter" id="lightboxCounter"></div>
+</div>
+
 <!-- ═══════════ Chat Area ═══════════ -->
 <main class="chat-area" id="chatArea">
   <div class="chat-header" id="chatHeader" style="display:none;">
@@ -827,7 +1027,7 @@ body.light .msg-sender:not(.role-群主):not(.role-管理员):not(.sender-self) 
         <div class="input-quote-sender" id="inputQuoteSender"></div>
         <div class="input-quote-text" id="inputQuoteText"></div>
       </div>
-      <button class="input-quote-close" id="inputQuoteClose">✕</button>
+      <button class="input-quote-close" id="inputQuoteClose" title="取消引用"><img src="icons/close.svg" class="svg-icon" style="width:12px;height:12px;" alt=""></button>
     </div>
     <div style="display:flex;gap:10px;align-items:flex-end;width:100%;">
     <textarea id="msgInput" rows="1" placeholder="输入消息… (Enter 发送, Shift+Enter 换行)" disabled></textarea>
@@ -924,7 +1124,49 @@ function connectWS() {
 // ── 处理新消息（来自 Bot 或自己发出） ──────────────
 let pendingContents = new Set();  // 去重用
 
+// ── 桌面通知 ──────────────────────────────────────────
+function notifyNewMessage(msg) {
+  if (localStorage.getItem('desktop_notify') !== '1') return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const isAt = !!msg.is_at;
+  const isCurrent = currentConv === msg.conversation_id;
+  if (!isAt && isCurrent) return;  // 正在看的会话不打扰
+  const conv = findConvAnywhere(msg.conversation_id);
+  const name = conv ? (conv.name || conv.id) : msg.conversation_id;
+  const body = (msg.sender_name ? msg.sender_name + ': ' : '') + (msg.content || '[图片/语音]');
+  try {
+    const n = new Notification(isAt ? `📣 ${name} @了你` : name, {
+      body: body.slice(0, 120),
+      icon: '/icons/bot.svg',
+      tag: msg.conversation_id,  // 同一会话的通知合并
+    });
+    n.onclick = () => { window.focus(); selectConv(msg.conversation_id); n.close(); };
+  } catch (e) { /* 通知失败不影响主流程 */ }
+}
+
 function handleIncomingMessage(msg) {
+  notifyNewMessage(msg);
+  // 隐藏会话收到新消息：不插入会话列表，只更新搜索缓存
+  if (msg.conversation_hidden) {
+    if (searchResults) {
+      const hs = searchResults.find(c => c.id === msg.conversation_id);
+      if (hs) {
+        hs.last_message = msg.content || '';
+        hs.last_sender = msg.sender_name || '';
+        hs.last_direction = msg.direction || '';
+        hs.unread_count = (hs.unread_count || 0) + (msg.conversation_id !== currentConv && msg.direction !== 'outgoing' ? 1 : 0);
+        renderConvList($searchInput.value);
+      }
+    }
+    // 当前正打开它则正常追加消息
+    if (currentConv === msg.conversation_id) {
+      if (msg.id && document.querySelector(`.msg-row[data-msg-id="${msg.id}"]`)) return;
+      if (msg.direction === 'outgoing' && pendingContents.has(msg.content)) return;
+      appendMessage(msg, true);
+      if (msg.id) lastMsgId = Math.max(lastMsgId, msg.id);
+    }
+    return;
+  }
   // 更新/插入会话列表
   const idx = conversations.findIndex(c => c.id === msg.conversation_id);
   if (idx >= 0) {
@@ -935,6 +1177,7 @@ function handleIncomingMessage(msg) {
     if (msg.conversation_id !== currentConv && msg.direction !== 'outgoing') {
       conversations[idx].unread_count++;
     }
+    if (msg.is_at) conversations[idx].at = true;  // @我 标记（打开会话后清除）
     const [item] = conversations.splice(idx, 1);
     conversations.unshift(item);
   } else {
@@ -947,6 +1190,7 @@ function handleIncomingMessage(msg) {
       last_sender: msg.sender_name || '',
       last_direction: msg.direction || '',
       unread_count: currentConv === msg.conversation_id ? 0 : 1,
+      at: !!msg.is_at,
     });
   }
   renderConvList();
@@ -970,23 +1214,26 @@ function convPreview(c) {
   return c.last_message;
 }
 
+let searchResults = null;  // 搜索时含隐藏会话的全量结果
+
 function renderConvList(filter = '') {
   const q = filter.toLowerCase();
-  const filtered = conversations.filter(c =>
+  const source = searchResults || conversations;
+  const filtered = source.filter(c =>
     !q || c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q)
-  );
+  ).sort((a, b) => (b.pinned || 0) - (a.pinned || 0));
 
   $convList.innerHTML = filtered.length === 0
     ? '<div style="padding:20px;color:var(--text-dim);text-align:center;">暂无会话</div>'
     : filtered.map(c => `
-      <div class="conv-item${c.id === currentConv ? ' active' : ''}"
+      <div class="conv-item${c.id === currentConv ? ' active' : ''}${c.pinned ? ' pinned' : ''}${c.hidden ? ' hidden-item' : ''}"
            data-id="${c.id}" onclick="selectConv('${c.id}')">
         <div class="avatar">${(c.name || c.id)[0]}</div>
         <div class="info">
-          <div class="name">${escHtml(c.name || c.id)}</div>
+          <div class="name">${c.at ? '<span class="at-tag">@</span>' : ''}${escHtml(c.name || c.id)}${c.hidden ? '<span style="color:var(--text-dim);font-size:0.75em;margin-left:6px;">(已隐藏)</span>' : ''}</div>
           <div class="preview">${escHtmlWithBr(convPreview(c) || '暂无消息')}</div>
         </div>
-        ${c.unread_count ? `<span class="badge">${c.unread_count > 99 ? '99+' : c.unread_count}</span>` : ''}
+        ${c.unread_count ? `<span class="badge${c.muted ? ' muted' : ''}">${c.unread_count > 99 ? '99+' : c.unread_count}</span>` : ''}
       </div>
     `).join('');
 }
@@ -1083,7 +1330,7 @@ function roleBadge(role) {
 }
 
 // ── 选择会话 ────────────────────────────────────────
-async function selectConv(convId) {
+async function selectConv(convId, targetMsgId = 0) {
   currentConv = convId;
   $chatEmpty.style.display = 'none';
   $messages.style.display = 'flex';
@@ -1094,34 +1341,109 @@ async function selectConv(convId) {
   $msgInput.focus();
 
   // 会话信息
-  const conv = conversations.find(c => c.id === convId);
+  const conv = findConvAnywhere(convId);
   if (conv) {
     $chatName.textContent = conv.name || conv.id;
     $chatAvatar.textContent = (conv.name || conv.id)[0];
-    // 立即清除未读（不等 API）
+    // 立即清除未读（不等 API）和 @ 标记
     conv.unread_count = 0;
+    conv.at = false;
+    // 搜索找回的隐藏会话：点进去自动取消隐藏
+    if (conv.hidden) {
+      API(`/api/conversations/${encodeURIComponent(convId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hidden: false }),
+      }).then(() => {
+        conv.hidden = 0;
+        renderConvList($searchInput.value);
+      });
+    }
     renderConvList($searchInput.value);
   }
 
-  // 加载历史消息
-  const data = await API(`/api/messages/${convId}?limit=50`);
+  // 加载历史消息（搜索定位时用 around 加载目标消息周围窗口）
+  const data = await API(`/api/messages/${convId}?limit=50${targetMsgId ? `&around=${targetMsgId}` : ''}`);
   $messages.innerHTML = '';
+  lastMsgDate = null;  // 重置日期分隔状态
   const msgs = data.messages || [];
   msgs.forEach(m => appendMessage(m, false));
   lastMsgId = msgs.length > 0 ? msgs[msgs.length - 1].id : 0;
 
-  // 滚动到底部
-  // 手机端：显示聊天区，隐藏侧栏
-  if (window.innerWidth <= 768) {
-    document.getElementById('chatArea').classList.add('mobile-open');
-    document.querySelector('.sidebar').style.display = 'none';
+  // 搜索定位：滚动到目标消息并高亮
+  if (targetMsgId) {
+    const el = document.querySelector(`.msg-row[data-msg-id="${targetMsgId}"]`);
+    if (el) {
+      el.classList.add('hl');
+      setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80);
+      setTimeout(() => el.classList.remove('hl'), 3000);
+    }
+  } else {
+    // 滚动到底部
+    // 手机端：显示聊天区，隐藏侧栏
+    if (window.innerWidth <= 768) {
+      document.getElementById('chatArea').classList.add('mobile-open');
+      document.querySelector('.sidebar').style.display = 'none';
+    }
+    scrollBottom();
   }
-  scrollBottom();
   renderConvList($searchInput.value);
 }
 
 // ── 追加单条消息 ────────────────────────────────────
+// ── 日期分隔条 ──────────────────────────────────────
+let lastMsgDate = null;
+
+function fmtDateDivider(ts) {
+  const d = ts.slice(0, 10);
+  const today = new Date();
+  const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  if (d === ymd) return '今天';
+  const yest = new Date(Date.now() - 86400000);
+  const yestStr = `${yest.getFullYear()}-${String(yest.getMonth() + 1).padStart(2, '0')}-${String(yest.getDate()).padStart(2, '0')}`;
+  if (d === yestStr) return '昨天';
+  const [, m, day] = d.split('-');
+  const wd = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][new Date(d + 'T00:00:00').getDay()];
+  return `${parseInt(m)}月${parseInt(day)}日 ${wd}`;
+}
+
+// ── 消息头像列（气泡外）───────────────────────────
+function msgAvatarHtml(direction, senderAvatar, senderName) {
+  if (direction === 'outgoing') {
+    // 自己发的：用自己设置的头像，未设置则不显示头像列
+    return getBotAvatar()
+      ? `<div class="msg-avatar-col"><img src="${escHtml(getBotAvatar())}" class="msg-avatar-img" onerror="this.style.display='none'" alt="" onclick="event.stopPropagation();viewImage('${escHtml(getBotAvatar())}')"></div>`
+      : '';
+  }
+  if (senderAvatar) {
+    return `<div class="msg-avatar-col"><img src="${escHtml(senderAvatar)}" class="msg-avatar-img" onerror="this.style.display='none'" alt="" onclick="event.stopPropagation();viewImage('${escHtml(senderAvatar)}')"></div>`;
+  }
+  // 无头像：首字符占位
+  return `<div class="msg-avatar-col"><span class="msg-avatar-fallback">${escHtml((senderName || '?')[0])}</span></div>`;
+}
+
+// ── 消息元信息行（气泡外：昵称 + 群角色）──────────
+function msgMetaHtml(direction, senderName, memberRole) {
+  if (!senderName) return '';
+  const roleCls = memberRole ? ' role-' + memberRole : '';
+  if (direction === 'outgoing') {
+    return `<div class="msg-meta meta-self${roleCls}">${icon('bot', 14)} ${escHtml(senderName.replace(/ 🤖$/, ''))}${roleBadge(memberRole)}</div>`;
+  }
+  return `<div class="msg-meta${roleCls}">${fmtBotMarker(escHtml(senderName))}${roleBadge(memberRole)}</div>`;
+}
+
 function appendMessage(msg, scroll) {
+  // 日期分隔条：与上一条消息日期不同时插入
+  if (msg.timestamp) {
+    const day = msg.timestamp.slice(0, 10);
+    if (day !== lastMsgDate) {
+      lastMsgDate = day;
+      const sep = document.createElement('div');
+      sep.className = 'msg-date-divider';
+      sep.textContent = fmtDateDivider(msg.timestamp);
+      $messages.appendChild(sep);
+    }
+  }
   const div = document.createElement('div');
   div.className = `msg-row ${msg.direction === 'outgoing' ? 'out' : 'in'}`;
   div.dataset.msgId = msg.id || '';
@@ -1160,7 +1482,7 @@ function appendMessage(msg, scroll) {
           }
           const sizeStyle = hasSize ? `width:${w}px;height:${h}px;` : `max-width:${maxW}px;max-height:${maxH}px;`;
           const placeStyle = hasSize ? `width:${w}px;height:${h}px;` : '';
-          attachHtml += `<div class="img-placeholder" style="${placeStyle}"><img src="${escHtml(mediaUrl)}" class="msg-image${isSticker ? ' sticker-img' : ''}" alt="${escHtml(a.filename || '图片')}" loading="lazy" onclick="viewImage('${escHtml(mediaUrl)}')" onerror="this.closest('.img-placeholder').outerHTML='<div class=\\'media-expired\\'>图片已过期或已被清理</div>';" onload="this.style.opacity='1'" style="${sizeStyle}opacity:0;"></div>`;
+          attachHtml += `<div class="img-placeholder" style="${placeStyle}"><img src="${escHtml(mediaUrl)}" class="msg-image${isSticker ? ' sticker-img' : ''}" alt="${escHtml(a.filename || '图片')}" loading="lazy" onclick="viewMedia(event)" onerror="this.closest('.img-placeholder').outerHTML='<div class=\\'media-expired\\'>图片已过期</div>';" onload="this.style.opacity='1'" style="${sizeStyle}opacity:0;"></div>`;
         } else if (a.content_type && a.content_type.startsWith('video/')) {
           const maxVW = 280, maxVH = 280;
           let vw, vh, hasSize = a.width && a.height;
@@ -1171,9 +1493,9 @@ function appendMessage(msg, scroll) {
           }
           const sizeStyle = hasSize ? `width:${vw}px;height:${vh}px;` : `max-width:${maxVW}px;max-height:${maxVH}px;`;
           const placeStyle = hasSize ? `width:${vw}px;height:${vh}px;` : '';
-          attachHtml += `<div class="img-placeholder" style="${placeStyle}"><video src="${escHtml(mediaUrl)}" class="msg-video" controls preload="metadata" style="${sizeStyle}border-radius:8px;display:block;position:relative;z-index:2;pointer-events:auto;opacity:0;" onloadedmetadata="this.style.opacity='1'" onerror="this.closest('.img-placeholder').outerHTML='<div class=\\'media-expired\\'>视频已过期或已被清理</div>';" oncontextmenu="event.stopPropagation()"></video></div>`;
+          attachHtml += `<div class="img-placeholder" style="${placeStyle};cursor:pointer;" title="点击全屏播放" onclick="viewMedia(event)"><div class="video-play-btn"></div><video src="${escHtml(mediaUrl)}" class="msg-video" muted playsinline preload="metadata" style="${sizeStyle}border-radius:8px;display:block;position:relative;z-index:2;pointer-events:none;opacity:0;" onloadedmetadata="this.style.opacity='1'" onerror="this.closest('.img-placeholder').outerHTML='<div class=\\'media-expired\\'>视频已过期</div>';" oncontextmenu="event.stopPropagation()"></video></div>`;
         } else if (isVoice || (a.content_type && a.content_type.startsWith('audio/'))) {
-          attachHtml += `<audio src="${escHtml(mediaUrl)}" class="msg-audio" controls preload="auto" style="display:block;margin-bottom:2px;max-width:280px;position:relative;z-index:2;pointer-events:auto;" onerror="this.outerHTML='<div class=\\'media-expired\\'>语音已过期或已被清理</div>';" oncontextmenu="event.stopPropagation()"></audio>`;
+          attachHtml += `<audio src="${escHtml(mediaUrl)}" class="msg-audio" controls preload="auto" style="display:block;margin-bottom:2px;max-width:280px;position:relative;z-index:2;pointer-events:auto;" onerror="this.outerHTML='<div class=\\'media-expired\\'>语音已过期</div>';" oncontextmenu="event.stopPropagation()"></audio>`;
           if (a.asr_refer_text) { attachHtml += `<div class="asr-text">${escHtmlWithBr(a.asr_refer_text)}</div>`; }
         } else if (a.content_type === 'file') {
           const sizeStr = formatFileSize(a.size || 0);
@@ -1202,16 +1524,21 @@ function appendMessage(msg, scroll) {
 
   const placeholders = ['[富媒体文件]', '[图片]', '[视频]', '[语音]', '[文件]', '[表情]', '[卡片消息]', '[键盘]', '[自定义消息]'];
   const isPlaceholder = !attachHtml && placeholders.includes(msg.content);
+  // 纯媒体消息（图片/视频/语音，无文本无引用）不垫气泡底
+  const mediaOnly = attachHtml && !msg.quoted_content && (
+    !msg.content || ['[图片]', '[视频]', '[语音]'].includes(msg.content)
+  );
 
   div.innerHTML = `
-    <div class="msg-checkbox">✓</div>
-    <div class="msg-bubble">
-      ${msg.sender_name
-        ? `<div class="msg-sender${msg.direction === 'outgoing' ? ' sender-self' : ''}${msg.member_role ? ' role-' + msg.member_role : ''}">${msg.direction === 'outgoing' ? icon('bot', 14) + ' ' : ''}${msg.sender_avatar && msg.direction !== 'outgoing' ? `<img src="${escHtml(msg.sender_avatar)}" onerror="this.style.display='none'" alt="" onclick="event.stopPropagation();viewImage('${escHtml(msg.sender_avatar)}')" style="cursor:pointer;">` : ''}${msg.direction === 'outgoing' ? escHtml(msg.sender_name.replace(/ 🤖$/, '')) : fmtBotMarker(escHtml(msg.sender_name))}${roleBadge(msg.member_role)}${msg.direction === 'outgoing' && getBotAvatar() ? `<img src="${escHtml(getBotAvatar())}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;cursor:pointer;margin-left:4px;" onerror="this.style.display='none'" onclick="event.stopPropagation();viewImage('${escHtml(getBotAvatar())}')">` : ''}</div>`
-        : ''}
-      ${attachHtml}
-      ${msg.quoted_content ? `<div class="quote-box" onclick="scrollToQuoted('${msg.quoted_ref_idx || ''}')" title="点击跳转到原消息"><div class="quote-sender"><span>${fmtBotMarker(escHtml(msg.quoted_sender || '未知用户'))}</span><img src="icons/up.svg" class="svg-icon" style="width:12px;height:12px;margin-left:4px;opacity:0.5;" alt=""></div><div class="quote-content">${fmtQuoteContent(msg.quoted_content, msg.quote_thumbs)}</div></div>` : ''}
-      ${msg.content && !placeholders.includes(msg.content) && !msg.content.startsWith('[文件]') ? `<div class="${isPlaceholder ? 'media-placeholder' : ''}">${(msg.msg_type == 2) ? renderMarkdown(msg.content) : escHtmlWithBr(msg.content)}</div>` : (isPlaceholder ? `<div class="media-placeholder">${escHtmlWithBr(msg.content)}</div>` : '')}
+    <div class="msg-checkbox"><img src="icons/ok.svg" class="svg-icon" style="width:12px;height:12px;" alt=""></div>
+    ${msgAvatarHtml(msg.direction, msg.sender_avatar, msg.sender_name)}
+    <div class="msg-body">
+      ${msgMetaHtml(msg.direction, msg.sender_name, msg.member_role)}
+      <div class="msg-bubble${mediaOnly ? ' media-only' : ''}">
+        ${attachHtml}
+        ${msg.quoted_content ? `<div class="quote-box" onclick="scrollToQuoted('${msg.quoted_ref_idx || ''}')" title="点击跳转到原消息"><div class="quote-sender"><span>${fmtBotMarker(escHtml(msg.quoted_sender || '未知用户'))}</span><img src="icons/up.svg" class="svg-icon" style="width:12px;height:12px;margin-left:4px;opacity:0.5;" alt=""></div><div class="quote-content">${fmtQuoteContent(msg.quoted_content, msg.quote_thumbs)}</div></div>` : ''}
+        ${msg.content && !placeholders.includes(msg.content) && !msg.content.startsWith('[文件]') ? `<div class="${isPlaceholder ? 'media-placeholder' : ''}">${(msg.msg_type == 2) ? renderMarkdown(msg.content) : escHtmlWithBr(msg.content)}</div>` : (isPlaceholder ? `<div class="media-placeholder">${escHtmlWithBr(msg.content)}</div>` : '')}
+      </div>
     </div>
   `;
 
@@ -1226,11 +1553,181 @@ function appendMessage(msg, scroll) {
 }
 
 // 点击查看大图
-function viewImage(src) {
+// ── 图片/视频灯箱 ───────────────────────────────────
+const lightboxItems = [];  // [{src, type: 'image'|'video'}]
+let lightboxIndex = 0;
+
+function viewImage(src, items = null, index = 0) {
   if (selectMode) return;
-  const w = window.open('');
-  w.document.write(`<title>图片预览</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#000;}</style><img src="${escHtml(src)}" style="max-width:100%;max-height:100vh;" onerror="this.alt='加载失败'">`);
+  lightboxItems.length = 0;
+  if (items && items.length > 0) {
+    lightboxItems.push(...items);
+    lightboxIndex = Math.min(Math.max(index, 0), items.length - 1);
+  } else {
+    lightboxItems.push({ src, type: 'image' });
+    lightboxIndex = 0;
+  }
+  showLightbox();
 }
+
+// 点击图/视频：收集整个会话已加载的媒体，按 DOM 顺序排列（QQ 多图常为多条消息）
+function viewMedia(event) {
+  // 视频 pointer-events:none，点击穿透到外层 .img-placeholder：
+  // 需先查容器内部的媒体元素，再查点击元素本身，最后才退回点击元素
+  const t = event.target;
+  const holder = t.closest ? t.closest('.img-placeholder') : null;
+  const el = (holder && holder.querySelector('.msg-image, .msg-video')) || (t.closest ? t.closest('.msg-image, .msg-video') : null) || t;
+  const mediaEls = [...$messages.querySelectorAll('.msg-image, .msg-video')];
+  const items = mediaEls
+    .map(im => ({ src: im.currentSrc || im.src || '', type: im.classList.contains('msg-image') ? 'image' : 'video' }))
+    .filter(it => it.src);
+  // 用元素引用定位索引（URL 字符串可能因重定向/时序不一致，元素引用必然准确）
+  let idx = mediaEls.indexOf(el);
+  if (idx < 0 || idx >= items.length || !items[idx].src) {
+    const src = el.currentSrc || el.src || '';
+    idx = items.findIndex(it => it.src === src);
+  }
+  viewImage(el.currentSrc || el.src || '', items, idx < 0 ? 0 : idx);
+}
+
+function showLightbox() {
+  // 保险：暂停会话里所有视频，避免与灯箱同时播放
+  $messages.querySelectorAll('.msg-video').forEach(v => v.pause());
+  const item = lightboxItems[lightboxIndex];
+  const img = $('#lightboxImg');
+  const video = $('#lightboxVideo');
+  // 重置失败提示和缩放
+  $('#lightboxError').style.display = 'none';
+  $('#lightboxZoom').style.display = 'none';
+  clearTimeout(lightboxZoomTimer);
+  img.style.display = 'block';
+  img.style.transform = '';
+  video.style.transform = '';
+  lightboxScale = 1;
+  if (item.type === 'video') {
+    // 暂停并卸掉上一个媒体
+    video.pause();
+    img.style.display = 'none';
+    video.style.display = 'block';
+    video.style.opacity = '0';
+    video.src = item.src;
+    video.load();
+    video.play().catch(() => {});
+    video.onloadeddata = () => { video.style.opacity = '1'; };
+  } else {
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    video.style.display = 'none';
+    img.style.display = 'block';
+    img.style.opacity = '0';
+    img.src = item.src;
+  }
+  $('#lightboxCounter').textContent = `${lightboxIndex + 1} / ${lightboxItems.length}`;
+  $('#lightboxPrev').style.display = lightboxItems.length > 1 ? '' : 'none';
+  $('#lightboxNext').style.display = lightboxItems.length > 1 ? '' : 'none';
+  $('#lightbox').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeLightbox() {
+  const video = $('#lightboxVideo');
+  video.pause();
+  video.removeAttribute('src');
+  video.load();
+  $('#lightbox').style.display = 'none';
+  document.body.style.overflow = '';
+  $('#lightboxImg').src = '';
+}
+
+function lightboxNav(dir) {
+  if (dir < 0 && lightboxIndex <= 0) { showToast('已是第一张'); return; }
+  if (dir > 0 && lightboxIndex >= lightboxItems.length - 1) { showToast('已是最后一张'); return; }
+  lightboxIndex += dir;
+  showLightbox();
+}
+
+$('#lightboxClose').addEventListener('click', closeLightbox);
+$('#lightboxBackdrop').addEventListener('click', closeLightbox);
+$('#lightboxPrev').addEventListener('click', () => lightboxNav(-1));
+$('#lightboxNext').addEventListener('click', () => lightboxNav(1));
+$('#lightboxImg').addEventListener('load', () => { $('#lightboxImg').style.opacity = '1'; });
+$('#lightboxImg').addEventListener('error', () => {
+  $('#lightboxImg').style.opacity = '1';
+  $('#lightboxImg').style.display = 'none';
+  $('#lightboxError').textContent = '图片已过期';
+  $('#lightboxError').style.display = 'block';
+});
+$('#lightboxVideo').addEventListener('error', () => {
+  $('#lightboxError').textContent = '视频已过期';
+  $('#lightboxError').style.display = 'block';
+});
+document.addEventListener('keydown', (e) => {
+  if ($('#lightbox').style.display !== 'flex') return;
+  if (e.key === 'Escape') closeLightbox();
+  else if (e.key === 'ArrowLeft') lightboxNav(-1);
+  else if (e.key === 'ArrowRight') lightboxNav(1);
+});
+// 移动端：单指滑动切换 + 双指缩放
+let lightboxTouchX = null, lightboxTouchY = null;
+let lightboxPinchDist = null;
+let lightboxScale = 1;
+let lightboxZoomTimer = null;
+
+function applyLightboxScale(s) {
+  lightboxScale = Math.min(Math.max(s, 0.5), 4);
+  const img = $('#lightboxImg');
+  const video = $('#lightboxVideo');
+  if (img.style.display !== 'none') img.style.transform = `scale(${lightboxScale})`;
+  else video.style.transform = `scale(${lightboxScale})`;
+  // 中央显示缩放比例，停止缩放后淡出
+  const $zoom = $('#lightboxZoom');
+  $zoom.textContent = Math.round(lightboxScale * 100) + '%';
+  $zoom.style.display = 'block';
+  clearTimeout(lightboxZoomTimer);
+  lightboxZoomTimer = setTimeout(() => { $zoom.style.display = 'none'; }, 600);
+}
+
+$('#lightbox').addEventListener('touchstart', (e) => {
+  if (e.touches.length >= 2) {
+    const [a, b] = e.touches;
+    lightboxPinchDist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    lightboxTouchX = lightboxTouchY = null;  // 双指时不处理滑动
+  } else {
+    lightboxPinchDist = null;
+    lightboxTouchX = e.touches[0].clientX;
+    lightboxTouchY = e.touches[0].clientY;
+  }
+}, { passive: true });
+
+$('#lightbox').addEventListener('touchmove', (e) => {
+  if (e.touches.length >= 2 && lightboxPinchDist !== null) {
+    e.preventDefault();  // 阻止浏览器页面级缩放/滚动
+    const [a, b] = e.touches;
+    const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    if (d > 0) {
+      applyLightboxScale(lightboxScale * (d / lightboxPinchDist));
+      lightboxPinchDist = d;
+    }
+  }
+}, { passive: false });
+
+$('#lightbox').addEventListener('touchend', (e) => {
+  if (lightboxPinchDist !== null || e.changedTouches.length >= 2) { lightboxPinchDist = null; return; }
+  if (lightboxTouchX === null) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - lightboxTouchX;
+  const dy = t.clientY - lightboxTouchY;
+  lightboxTouchX = lightboxTouchY = null;
+  if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return;  // 阈值 + 水平主导
+  lightboxNav(dx < 0 ? 1 : -1);  // 左滑下一张，右滑上一张
+}, { passive: true });
+
+// 桌面端：滚轮缩放
+$('#lightbox').addEventListener('wheel', (e) => {
+  e.preventDefault();
+  applyLightboxScale(lightboxScale * (e.deltaY < 0 ? 1.1 : 0.9));
+}, { passive: false });
 
 function scrollBottom() {
   // 先立刻滚一次
@@ -1345,12 +1842,15 @@ function appendPendingMessage(msg) {
   div.dataset.msgContent = msg.content;
 
   div.innerHTML = `
-    <div class="msg-bubble">
-      ${msg.sender_name ? `<div class="msg-sender sender-self">${icon('bot', 14)} ${escHtml(msg.sender_name.replace(/ 🤖$/, ''))}${getBotAvatar() ? `<img src="${escHtml(getBotAvatar())}" onerror="this.style.display='none'" style="width:20px;height:20px;border-radius:50%;object-fit:cover;cursor:pointer;margin-left:4px;">` : ''}</div>` : ''}
-      ${msg.quoted_content ? `<div class="quote-box" onclick="scrollToQuoted('${msg.quoted_ref_idx || ''}')" title="点击跳转到原消息"><div class="quote-sender"><span>${fmtBotMarker(escHtml(msg.quoted_sender || '未知用户'))}</span><img src="icons/up.svg" class="svg-icon" style="width:12px;height:12px;margin-left:4px;opacity:0.5;" alt=""></div><div class="quote-content">${fmtQuoteContent(msg.quoted_content, msg.quote_thumbs)}</div></div>` : ''}
-      <div>${(msg.msg_type == 2) ? renderMarkdown(msg.content) : escHtmlWithBr(msg.content)}</div>
+    ${msgAvatarHtml('outgoing', '', msg.sender_name)}
+    <div class="msg-body">
+      ${msgMetaHtml('outgoing', msg.sender_name, '')}
+      <div class="msg-bubble">
+        ${msg.quoted_content ? `<div class="quote-box" onclick="scrollToQuoted('${msg.quoted_ref_idx || ''}')" title="点击跳转到原消息"><div class="quote-sender"><span>${fmtBotMarker(escHtml(msg.quoted_sender || '未知用户'))}</span><img src="icons/up.svg" class="svg-icon" style="width:12px;height:12px;margin-left:4px;opacity:0.5;" alt=""></div><div class="quote-content">${fmtQuoteContent(msg.quoted_content, msg.quote_thumbs)}</div></div>` : ''}
+        <div>${(msg.msg_type == 2) ? renderMarkdown(msg.content) : escHtmlWithBr(msg.content)}</div>
+      </div>
+      <button class="msg-retry" onclick="sendMessage('${msg.pending_id}')" title="重发">!</button>
     </div>
-    <button class="msg-retry" onclick="sendMessage('${msg.pending_id}')" title="重发">!</button>
   `;
   const timeExt = document.createElement('div');
   timeExt.className = 'msg-time-ext';
@@ -1382,10 +1882,13 @@ function replacePendingMessage(pendingId, realMsg) {
   const oldQuoteHTML = oldQuoteBox ? oldQuoteBox.outerHTML : '';
 
   el.innerHTML = `
-    <div class="msg-bubble">
-      ${realMsg.sender_name ? `<div class="msg-sender sender-self${realMsg.member_role ? ' role-' + realMsg.member_role : ''}">${icon('bot', 14)} ${escHtml(realMsg.sender_name.replace(/ 🤖$/, ''))}${roleBadge(realMsg.member_role)}${getBotAvatar() ? `<img src="${escHtml(getBotAvatar())}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;cursor:pointer;margin-left:4px;" onerror="this.style.display='none'" onclick="event.stopPropagation();viewImage('${escHtml(getBotAvatar())}')">` : ''}</div>` : ''}
-      ${realMsg.quoted_content ? `<div class="quote-box"><div class="quote-sender">${fmtBotMarker(escHtml(realMsg.quoted_sender || '未知用户'))}</div><div class="quote-content">${fmtQuoteContent(realMsg.quoted_content, realMsg.quote_thumbs)}</div></div>` : ''}
-      <div>${(realMsg.msg_type == 2) ? renderMarkdown(realMsg.content) : escHtmlWithBr(realMsg.content)}</div>
+    ${msgAvatarHtml('outgoing', '', realMsg.sender_name)}
+    <div class="msg-body">
+      ${msgMetaHtml('outgoing', realMsg.sender_name, realMsg.member_role)}
+      <div class="msg-bubble">
+        ${realMsg.quoted_content ? `<div class="quote-box"><div class="quote-sender">${fmtBotMarker(escHtml(realMsg.quoted_sender || '未知用户'))}</div><div class="quote-content">${fmtQuoteContent(realMsg.quoted_content, realMsg.quote_thumbs)}</div></div>` : ''}
+        <div>${(realMsg.msg_type == 2) ? renderMarkdown(realMsg.content) : escHtmlWithBr(realMsg.content)}</div>
+      </div>
     </div>
   `;
   let timeExt = el.querySelector('.msg-time-ext');
@@ -1423,7 +1926,80 @@ $msgInput.addEventListener('input', () => {
   $msgInput.style.height = 'auto';
   $msgInput.style.height = Math.min($msgInput.scrollHeight, 120) + 'px';
 });
-$searchInput.addEventListener('input', () => renderConvList($searchInput.value));
+// ── 会话搜索 ────────────────────────────────────────
+function doConvSearch(q) {
+  // 搜索时带上隐藏会话，支持通过备注/OpenID 找回
+  API('/api/conversations?include_hidden=1').then(d => {
+    searchResults = d.conversations || [];
+    renderConvList($searchInput.value);
+  });
+}
+
+$searchInput.addEventListener('input', () => {
+  const q = $searchInput.value.trim();
+  if (q) doConvSearch(q);
+  else { searchResults = null; renderConvList(''); }
+});
+
+// ── 群聊设置 → 查找聊天记录 ─────────────────────────
+let msgSearchTimer = null;
+
+$('#btnOpenMsgSearch').addEventListener('click', () => {
+  $('#msgSearchInput').value = '';
+  $('#msgSearchResults').innerHTML = '<div style="padding:20px;color:var(--text-dim);text-align:center;">输入关键词搜索当前群聊</div>';
+  $('#msgSearchModal').classList.add('show');
+  $('#msgSearchInput').focus();
+});
+$('#btnCloseMsgSearch').addEventListener('click', () => $('#msgSearchModal').classList.remove('show'));
+$('#msgSearchModal').addEventListener('click', (e) => {
+  if (e.target === $('#msgSearchModal')) $('#msgSearchModal').classList.remove('show');
+});
+
+function renderMsgSearchResults(results, q) {
+  const $box = $('#msgSearchResults');
+  $box.innerHTML = results.length === 0
+    ? `<div style="padding:20px;color:var(--text-dim);text-align:center;">未找到 "${escHtml(q)}" 相关消息</div>`
+    : results.map(m => {
+    // 头像：bot 自己发的用自己设置的头像（未设置则留空回退放大镜）；他人消息用发送者头像
+    const avatarHtml = m.direction === 'outgoing'
+      ? (getBotAvatar() ? `<img src="${escHtml(getBotAvatar())}" class="srch-avatar" onerror="this.classList.add('failed')" alt="">` : '')
+      : (m.sender_avatar ? `<img src="${escHtml(m.sender_avatar)}" class="srch-avatar" onerror="this.classList.add('failed')" alt="">` : '');
+    return `
+      <div class="conv-item" data-conv-id="${m.conversation_id}" data-msg-id="${m.id}">
+        <div class="avatar" style="background:#3b82f6;position:relative;">${avatarHtml}<img src="icons/search.svg" class="svg-icon" style="width:18px;height:18px;" alt=""></div>
+        <div class="info">
+          <div class="name">${fmtBotMarker(escHtml(m.sender_name || ''))} <span style="color:var(--text-dim);font-size:0.7em;">${escHtml((m.timestamp || '').slice(5, 16))}</span></div>
+          <div class="preview">${escHtmlWithBr(m.content || '[图片/语音]')}</div>
+        </div>
+      </div>
+    `;
+    }).join('');
+}
+
+$('#msgSearchInput').addEventListener('input', () => {
+  clearTimeout(msgSearchTimer);
+  const q = $('#msgSearchInput').value.trim();
+  const convId = currentConv;
+  if (!q || !convId) {
+    $('#msgSearchResults').innerHTML = '<div style="padding:20px;color:var(--text-dim);text-align:center;">输入关键词搜索当前群聊</div>';
+    return;
+  }
+  msgSearchTimer = setTimeout(() => {
+    API(`/api/search?q=${encodeURIComponent(q)}&conv_id=${encodeURIComponent(convId)}`).then(d => renderMsgSearchResults(d.results || [], q));
+  }, 300);
+});
+
+// 点击结果：关闭两个弹窗并跳转定位
+$('#msgSearchResults').addEventListener('click', (e) => {
+  const item = e.target.closest('.conv-item');
+  if (!item) return;
+  const convId = item.dataset.convId;
+  const msgId = parseInt(item.dataset.msgId) || 0;
+  if (!convId) return;
+  $('#msgSearchModal').classList.remove('show');
+  hideRenameModal();
+  selectConv(convId, msgId);
+});
 
 // MD 勾选框样式切换
 function updateMdToggle() {
@@ -1560,7 +2136,7 @@ function toggleMD() {
   $('#richMenu').style.display = 'none';
 }
 function updateMdMenuStatus() {
-  $('#mdMenuStatus').textContent = $('#mdCheckbox').checked ? '✓' : '';
+  $('#mdMenuStatus').innerHTML = $('#mdCheckbox').checked ? '<img src="icons/ok.svg" class="svg-icon" style="width:12px;height:12px;vertical-align:-1px;" alt="">' : '';
 }
 function toggleExpandInput() {
   $('#richMenu').style.display = 'none';
@@ -1576,7 +2152,7 @@ function toggleExpandInput() {
   updateExpandMenuStatus();
 }
 function updateExpandMenuStatus() {
-  $('#expandMenuStatus').textContent = $('#msgInput').style.maxHeight === 'none' ? '✓' : '';
+  $('#expandMenuStatus').innerHTML = $('#msgInput').style.maxHeight === 'none' ? '<img src="icons/ok.svg" class="svg-icon" style="width:12px;height:12px;vertical-align:-1px;" alt="">' : '';
 }
 $('#richMediaBtn').addEventListener('click', (e) => {
   e.stopPropagation();
@@ -1644,18 +2220,21 @@ $('#richFileInput').addEventListener('change', async function() {
   pendingDiv.className = 'msg-row out pending';
   pendingDiv.dataset.pendingId = tempId;
   pendingDiv.innerHTML = `
-    <div class="msg-bubble">
-      ${botDisplayName ? `<div class="msg-sender sender-self">${icon('bot', 14)} ${escHtml(botDisplayName.replace(/ 🤖$/, ''))}${getBotAvatar() ? `<img src="${escHtml(getBotAvatar())}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;cursor:pointer;margin-left:4px;" onerror="this.style.display='none'" onclick="event.stopPropagation();viewImage('${escHtml(getBotAvatar())}')">` : ''}</div>` : ''}
-      <div class="img-placeholder">${mediaType === 'video'
-        ? `<video src="${blobUrl}" class="msg-video" controls preload="metadata" style="max-width:280px;max-height:280px;border-radius:8px;opacity:0.7;position:relative;z-index:2;pointer-events:auto;" oncontextmenu="event.stopPropagation()"></video>`
-        : mediaType === 'voice'
-        ? `<audio src="${blobUrl}" class="msg-audio" controls preload="auto" style="max-width:280px;opacity:0.7;position:relative;z-index:2;pointer-events:auto;" oncontextmenu="event.stopPropagation()"></audio>`
-        : mediaType === 'file'
-        ? `<div class="file-card" style="opacity:0.7;"><span class="file-icon"><img src="icons/${fileIconName(file.name)}.svg" class="svg-icon" style="width:20px;height:20px;" alt=""></span><div class="file-info"><div class="file-name">${escHtml(file.name)}</div><div class="file-size">${formatFileSize(file.size)}</div></div></div>`
-        : `<img src="${blobUrl}" class="msg-image" style="max-width:280px;max-height:280px;object-fit:cover;border-radius:8px;opacity:0.7;cursor:pointer;" onclick="event.stopPropagation();viewImage('${blobUrl}')">`}</div>
-      <div style="font-size:0.75em;color:var(--text-dim);">上传中…</div>
+    ${msgAvatarHtml('outgoing', '', botDisplayName)}
+    <div class="msg-body">
+      ${msgMetaHtml('outgoing', botDisplayName, '')}
+      <div class="msg-bubble${mediaType !== 'file' ? ' media-only' : ''}">
+        <div class="img-placeholder" style="cursor:pointer;" title="点击全屏播放" onclick="viewMedia(event)">${mediaType === 'video'
+          ? `<div class="video-play-btn"></div><video src="${blobUrl}" class="msg-video" muted playsinline preload="metadata" style="max-width:280px;max-height:280px;border-radius:8px;opacity:0.7;position:relative;z-index:2;pointer-events:none;" oncontextmenu="event.stopPropagation()"></video>`
+          : mediaType === 'voice'
+          ? `<audio src="${blobUrl}" class="msg-audio" controls preload="auto" style="max-width:280px;opacity:0.7;position:relative;z-index:2;pointer-events:auto;" oncontextmenu="event.stopPropagation()"></audio>`
+          : mediaType === 'file'
+          ? `<div class="file-card" style="opacity:0.7;"><span class="file-icon"><img src="icons/${fileIconName(file.name)}.svg" class="svg-icon" style="width:20px;height:20px;" alt=""></span><div class="file-info"><div class="file-name">${escHtml(file.name)}</div><div class="file-size">${formatFileSize(file.size)}</div></div></div>`
+          : `<img src="${blobUrl}" class="msg-image" style="max-width:280px;max-height:280px;object-fit:cover;border-radius:8px;opacity:0.7;cursor:pointer;" onclick="event.stopPropagation();viewMedia(event)">`}</div>
+        <div style="font-size:0.75em;color:var(--text-dim);">上传中…</div>
+      </div>
+      <button class="msg-retry" onclick="retryRichSend('${tempId}')" title="重发" style="display:none;">!</button>
     </div>
-    <button class="msg-retry" onclick="retryRichSend('${tempId}')" title="重发" style="display:none;">!</button>
   `;
   pendingDiv.addEventListener('contextmenu', onMsgContextMenu);
   $messages.appendChild(pendingDiv);
@@ -1792,10 +2371,31 @@ function showRenameModal() {
   if (!currentConv) return;
   const conv = conversations.find(c => c.id === currentConv);
   $renameInput.value = conv ? conv.name : '';
+  $('#convOpenIdText').textContent = currentConv;
   $renameModal.classList.add('show');
   $renameInput.focus();
   $renameInput.select();
 }
+
+// 复制群 OpenID
+$('#btnCopyConvId').addEventListener('click', async () => {
+  const oid = $('#convOpenIdText').textContent || '';
+  if (!oid) return;
+  try {
+    await navigator.clipboard.writeText(oid);
+  } catch (e) {
+    // 降级：选中文本 + execCommand
+    const el = $('#convOpenIdText');
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand('copy');
+    sel.removeAllRanges();
+  }
+  showToast('✓ 已复制群 OpenID');
+});
 function hideRenameModal() {
   $renameModal.classList.remove('show');
 }
@@ -1974,8 +2574,17 @@ function onMsgContextMenu(e) {
     el: this,
   };
   $('#ctxCopy').innerHTML = '<img src="icons/copy.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 复制';
-  $('#ctxRecall').style.display = ctxTargetMsg.direction === 'outgoing' ? '' : 'none';
+  // 撤回仅限自己发的、且发出不超过 2 分钟的消息（QQ 撤回时限）
+  const recallOk = ctxTargetMsg.direction === 'outgoing'
+    && (() => {
+      const ts = ctxTargetMsg.timestamp;
+      if (!ts) return false;
+      const t = new Date(ts.replace(' ', 'T')).getTime();
+      return !isNaN(t) && Date.now() - t <= 2 * 60 * 1000;
+    })();
+  $('#ctxRecall').style.display = recallOk ? '' : 'none';
   $('#ctxMultiSelect').style.display = '';
+  $convCtxMenu.style.display = 'none';
   $ctxMenu.style.display = 'block';
   // 先显示才能量高度
   const menuH = $ctxMenu.offsetHeight || 120;
@@ -1988,10 +2597,79 @@ function onMsgContextMenu(e) {
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.context-menu')) {
     $ctxMenu.style.display = 'none';
+    $convCtxMenu.style.display = 'none';
     // 不在这里清空 ctxTargetMsg，让转发/收藏弹窗还能用到
     // 弹窗关闭时各自负责清理
   }
 });
+
+// ── 会话右键菜单（置顶 / 免打扰 / 不显示）───────────────
+const $convCtxMenu = $('#convCtxMenu');
+let ctxConvId = null;
+
+function findConvAnywhere(id) {
+  return (searchResults || conversations).find(c => c.id === id) || null;
+}
+
+$convList.addEventListener('contextmenu', (e) => {
+  const item = e.target.closest('.conv-item');
+  if (!item) return;
+  e.preventDefault();
+  ctxConvId = item.dataset.id;
+  const conv = findConvAnywhere(ctxConvId);
+  if (!conv) return;
+  $('#convCtxPin').innerHTML = `<img src="icons/up.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> ${conv.pinned ? '取消置顶' : '置顶'}`;
+  $('#convCtxMute').innerHTML = `<img src="icons/${conv.muted ? 'disturb' : 'donotdisturb'}.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> ${conv.muted ? '取消免打扰' : '消息免打扰'}`;
+  $('#convCtxHide').innerHTML = `<img src="icons/${conv.hidden ? 'show' : 'hidden'}.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> ${conv.hidden ? '显示会话' : '不显示会话'}`;
+  $ctxMenu.style.display = 'none';
+  $convCtxMenu.style.display = 'block';
+  const menuH = $convCtxMenu.offsetHeight || 120;
+  let top = e.clientY;
+  if (e.clientY + menuH > window.innerHeight) top = e.clientY - menuH;
+  $convCtxMenu.style.left = Math.min(e.clientX, window.innerWidth - 160) + 'px';
+  $convCtxMenu.style.top = Math.max(0, top) + 'px';
+});
+
+async function toggleConvFlag(field) {
+  const conv = findConvAnywhere(ctxConvId);
+  if (!conv) return;
+  const newVal = conv[field] ? 0 : 1;
+  $convCtxMenu.style.display = 'none';
+  let r;
+  try {
+    r = await API(`/api/conversations/${encodeURIComponent(ctxConvId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: newVal }),
+    });
+  } catch (e) {
+    showToast('⚠ 网络错误'); return;
+  }
+  if (r && r.error) { showToast('⚠ ' + r.error); return; }
+  conv[field] = newVal;
+  // 隐藏会话：从可见列表移除；若正在查看则关闭聊天区
+  if (field === 'hidden' && newVal) {
+    const i = conversations.findIndex(c => c.id === ctxConvId);
+    if (i >= 0) conversations.splice(i, 1);
+    if (currentConv === ctxConvId) {
+      currentConv = '';
+      $chatEmpty.style.display = 'flex';
+      $messages.style.display = 'none';
+      $chatHeader.style.display = 'none';
+      $inputArea.style.display = 'none';
+      $msgInput.disabled = true;
+    }
+  }
+  renderConvList($searchInput.value);
+  const label = field === 'pinned' ? (newVal ? '已置顶' : '已取消置顶')
+    : field === 'muted' ? (newVal ? '已开启免打扰' : '已取消免打扰')
+    : (newVal ? '已隐藏会话' : '已恢复显示');
+  showToast('✓ ' + label);
+}
+
+$('#convCtxPin').addEventListener('click', () => toggleConvFlag('pinned'));
+$('#convCtxMute').addEventListener('click', () => toggleConvFlag('muted'));
+$('#convCtxHide').addEventListener('click', () => toggleConvFlag('hidden'));
 
 // ── 文件下载 ─────────────────────────────────────────
 function fileIconName(filename) {
@@ -2007,16 +2685,6 @@ function formatFileSize(bytes) {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
-}
-
-function fileIcon(filename) {
-  const ext = (filename || '').split('.').pop().toLowerCase();
-  if (['png','jpg','jpeg','gif','bmp','webp','svg','ico'].includes(ext)) return '🖼';
-  if (['mp4','avi','mov','mkv','wmv','flv','webm','ts'].includes(ext)) return '🎬';
-  if (['mp3','wav','ogg','flac','aac','m4a','amr','opus'].includes(ext)) return '🎵';
-  if (['pdf','doc','docx','xls','xlsx','ppt','pptx','txt','csv'].includes(ext)) return '📃';
-  if (['zip','rar','7z','tar','gz','bz2','xz'].includes(ext)) return '<img src="icons/memory.svg" class="svg-icon" style="width:16px;height:16px;" alt="">';
-  return '📄';
 }
 
 function downloadFile(url, filename, cardEl) {
@@ -2037,12 +2705,36 @@ function downloadFile(url, filename, cardEl) {
 }
 
 // ── Toast ─────────────────────────────────────────────
+// Toast 队列：同一时间只显示一个，当前显示完再显示下一个
+const toastQueue = [];
+let toastShowing = false;
+
 function showToast(msg) {
+  toastQueue.push(msg);
+  pumpToast();
+}
+
+function pumpToast() {
+  if (toastShowing || toastQueue.length === 0) return;
+  toastShowing = true;
+  const text = toastQueue.shift();
   const el = document.createElement('div');
   el.className = 'toast';
-  el.textContent = msg;
+  // 前缀 emoji → 对应图标：✅✓→ok, ⭐→favourite, ⚠→warning
+  const m = text.match(/^([✅✓⭐⚠])\s*/);
+  if (m) {
+    const iconName = m[1] === '⭐' ? 'favourite' : m[1] === '⚠' ? 'warning' : 'ok';
+    el.innerHTML = `<div class="toast-icon"><img src="icons/${iconName}.svg" class="svg-icon" alt=""></div><div class="toast-text">${escHtml(text.slice(m[0].length))}</div>`;
+  } else {
+    el.innerHTML = `<div class="toast-text">${escHtml(text)}</div>`;
+  }
   $('#toastContainer').appendChild(el);
-  setTimeout(() => el.remove(), 2000);
+  // 2s 后移除（toastIn 0.25s + 停留 + toastOut 0.25s），随后显示队列中下一个
+  setTimeout(() => {
+    el.remove();
+    toastShowing = false;
+    setTimeout(pumpToast, 120);  // 小间隔，视觉上逐条出现
+  }, 2000);
 }
 
 // ── 收藏 ─────────────────────────────────────────────
@@ -2121,7 +2813,8 @@ $('#settingsNav').addEventListener('click', (e) => {
   if (tab) {
     tab.style.display = '';
     if (item.dataset.tab === 'status') loadStatus();
-    else stopStatusRefresh();
+    else if (item.dataset.tab === 'logs') loadLogs();
+    else { stopStatusRefresh(); stopLogsRefresh(); }
   }
 });
 
@@ -2144,7 +2837,7 @@ async function refreshStatus() {
     const info = await API('/api/system-info');
     $sc.innerHTML = `
       <div style="text-align:center;margin-bottom:12px;">
-        <span style="font-size:1.1em;font-weight:700;"><img src="icons/bot.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> NeonBotChat v26.8.0</span>
+        <span style="font-size:1.1em;font-weight:700;"><img src="icons/bot.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> NeonBotChat v28.8.2</span>
       </div>
       <div class="stat-card">
         <div class="stat-label"><img src="icons/system.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 系统</div>
@@ -2174,6 +2867,68 @@ async function refreshStatus() {
     $sc.innerHTML = '<div style="color:var(--danger);">加载失败</div>';
   }
 }
+
+// ── 日志页面 ─────────────────────────────────────────
+let logsTimer = null;
+let logsLastSeq = 0;
+
+function stopLogsRefresh() {
+  if (logsTimer) { clearInterval(logsTimer); logsTimer = null; }
+}
+
+async function loadLogs() {
+  stopLogsRefresh();
+  logsLastSeq = 0;
+  const $lc = $('#logsContent');
+  $lc.innerHTML = '加载中…';
+  await refreshLogs();
+  logsTimer = setInterval(refreshLogs, 2000);
+}
+
+async function refreshLogs() {
+  const $lc = $('#logsContent');
+  try {
+    const r = await API('/api/logs?since=' + logsLastSeq);
+    logsLastSeq = r.latest_seq;
+    if ($lc.innerHTML === '加载中…') $lc.innerHTML = '';
+    const rows = r.logs.map(l => {
+      let color = 'inherit';
+      let weight = '400';
+      if (l.level === 'ERROR' || l.level === 'CRITICAL') { color = 'var(--danger)'; weight = '700'; }
+      else if (l.level === 'WARNING') color = '#e67e22';
+      else if (l.level === 'DEBUG') color = 'var(--text-dim)';
+      return `<div><span style="color:var(--text-dim);">${escHtml(l.time)}</span> <span style="color:${color};font-weight:${weight};">[${escHtml(l.level)}]</span> ${escHtml(l.msg)}</div>`;
+    }).join('');
+    if (rows) {
+      const wasAtBottom = $lc.scrollHeight - $lc.scrollTop - $lc.clientHeight < 30;
+      $lc.insertAdjacentHTML('beforeend', rows);
+      if (wasAtBottom) $lc.scrollTop = $lc.scrollHeight;
+    }
+  } catch (e) {
+    $lc.innerHTML = '<div style="color:var(--danger);">加载日志失败</div>';
+  }
+}
+
+// ── 桌面通知开关 ─────────────────────────────────────
+const $chkNotify = $('#chkDesktopNotify');
+if (localStorage.getItem('desktop_notify') === '1') $chkNotify.checked = true;
+$chkNotify.addEventListener('change', () => {
+  const on = $chkNotify.checked;
+  if (!on) { localStorage.removeItem('desktop_notify'); return; }
+  if (!('Notification' in window)) { showToast('⚠ 浏览器不支持桌面通知'); $chkNotify.checked = false; return; }
+  if (Notification.permission === 'default') {
+    Notification.requestPermission().then(p => {
+      if (p === 'granted') { localStorage.setItem('desktop_notify', '1'); showToast('✓ 桌面通知已开启'); }
+      else { $chkNotify.checked = false; showToast('⚠ 通知权限被拒绝'); }
+    });
+  } else if (Notification.permission === 'granted') {
+    localStorage.setItem('desktop_notify', '1');
+    showToast('✓ 桌面通知已开启');
+  } else {
+    $chkNotify.checked = false;
+    showToast('⚠ 通知权限被拒绝，请在浏览器设置中允许');
+  }
+});
 
 $('#favBtn').addEventListener('click', () => {
   renderFavList();
@@ -2682,7 +3437,7 @@ async function init() {
   // 获取 Bot 名称
   try {
     const info = await API('/api/system-info');
-    botDisplayName = (info.bot_name || 'Bot') + ' 🤖';
+    botDisplayName = (info.bot_name || 'Bot');
     updateAccountBotName();
   } catch (e) {}
 }
