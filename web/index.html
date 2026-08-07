@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeonBotChat 聊天</title>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css">
+<link rel="stylesheet" href="css/base.css?v=26.8.2">
+<link rel="stylesheet" href="css/layout.css?v=26.8.2">
+<link rel="stylesheet" href="css/components.css?v=26.8.2">
+<link rel="stylesheet" href="css/light.css?v=26.8.2">
+</head>
+<body>
+<div class="chat-bg-layer" id="chatBgLayer"></div>
+
+<!-- ═══════════ Sidebar ═══════════ -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <span class="logo"><img src="icons/bot.svg" class="svg-icon" style="width:22px;height:22px;" alt=""> BotChat</span>
+    <span class="status" id="botStatus">● 在线</span>
+    <button class="btn-add" id="btnAddConv" title="添加群聊"><img src="icons/add_group.svg" class="svg-icon" style="width:18px;height:18px;" alt=""></button>
+  </div>
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="搜索会话…" autocomplete="off">
+  </div>
+  <div class="conv-list" id="convList">
+    <div style="padding:20px; color:var(--text-dim); text-align:center;">加载中…</div>
+  </div>
+  <div class="sidebar-footer" style="display:flex;">
+    <span id="favBtn" style="flex:1;text-align:center;cursor:pointer;" title="收藏列表"><img src="icons/favourite.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 收藏</span>
+    <span id="aboutBtn" style="flex:1;text-align:center;cursor:pointer;" title="设置"><img src="icons/settings.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 设置</span>
+  </div>
+</aside>
+
+<!-- ═══════════ Add Conversation Modal ═══════════ -->
+<div class="modal-overlay" id="addConvModal">
+  <div class="modal-box">
+    <h3><img src="icons/add_group.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 添加群聊</h3>
+    <label for="newConvId">群 OpenID</label>
+    <input type="text" id="newConvId" placeholder="粘贴群 group_openid…" autocomplete="off">
+    <label for="newConvName">备注名（可选）</label>
+    <input type="text" id="newConvName" placeholder="例如：摸鱼群" autocomplete="off">
+    <div class="modal-actions">
+      <button class="btn-cancel" id="btnCancelAdd">取消</button>
+      <button class="glass-btn active" id="btnOkAdd">添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ Rename Conversation Modal ═══════════ -->
+<div class="modal-overlay" id="renameConvModal">
+  <div class="modal-box">
+    <h3><img src="icons/settings.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 群聊设置</h3>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;background:rgba(0,0,0,0.12);border-radius:8px;padding:8px 10px;">
+      <span style="font-size:0.8em;color:var(--text-dim);flex-shrink:0;">群 OpenID</span>
+      <code id="convOpenIdText" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.78em;color:var(--text);user-select:all;" title="点击可全选"></code>
+      <button class="glass-btn" id="btnCopyConvId" style="padding:3px 10px;font-size:0.8em;"><img src="icons/copy.svg" class="svg-icon" style="width:14px;height:14px;" alt=""> 复制</button>
+    </div>
+    <label for="renameConvInput">备注名</label>
+    <div style="display:flex; gap:8px;">
+      <input type="text" id="renameConvInput" placeholder="输入新备注名…" autocomplete="off" style="flex:1; margin-bottom:0;">
+      <button class="glass-btn active" id="btnOkRename" style="white-space:nowrap;">保存</button>
+    </div>
+    <hr style="border-color:var(--border); margin:16px 0;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <span style="font-size:0.9em; color:var(--text-dim);">清空聊天记录</span>
+      <button class="glass-btn danger" id="btnClearHistory" style="color:var(--danger);"><img src="icons/delete.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 清空</button>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;">
+      <span style="font-size:0.9em; color:var(--text-dim);">查找聊天记录</span>
+      <button class="glass-btn" id="btnOpenConvSearch"><img src="icons/search.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 查找</button>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;">
+      <span style="font-size:0.9em; color:var(--text-dim);">导出聊天记录</span>
+      <div style="display:flex; gap:6px;">
+        <button class="glass-btn" id="btnExportMd" style="padding:4px 10px;font-size:0.8em;"><img src="icons/documents.svg" class="svg-icon" style="width:14px;height:14px;" alt=""> Markdown</button>
+        <button class="glass-btn" id="btnExportJson" style="padding:4px 10px;font-size:0.8em;"><img src="icons/query.svg" class="svg-icon" style="width:14px;height:14px;" alt=""> JSON</button>
+      </div>
+    </div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="glass-btn" id="btnCancelRename">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 查找聊天记录 Modal ═══════════ -->
+<div class="modal-overlay" id="msgSearchModal" style="z-index:150;">
+  <div class="modal-box" style="width:480px; max-width:95vw;">
+    <h3><img src="icons/search.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 查找聊天记录</h3>
+    <input type="text" id="msgSearchInput" placeholder="搜索全部群聊…" autocomplete="off">
+    <div id="msgSearchResults" style="max-height:50vh; overflow-y:auto; margin-top:4px;"></div>
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="glass-btn" id="btnCloseMsgSearch">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 群聊的聊天记录 Modal ═══════════ -->
+<div class="modal-overlay" id="chatRecordModal">
+  <div class="modal-box" style="width:520px; max-width:95vw;">
+    <h3><img src="icons/documents.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 群聊的聊天记录</h3>
+    <div id="chatRecordList" style="max-height:60vh; overflow-y:auto; margin-top:4px;"></div>
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="glass-btn" id="btnCloseChatRecord">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ Confirm Dialog ═══════════ -->
+<div class="modal-overlay" id="confirmDialog">
+  <div class="modal-box" style="text-align:center;width:360px;">
+    <div id="confirmIcon" style="font-size:2em;margin-bottom:8px;"></div>
+    <p id="confirmMsg" style="margin-bottom:16px;font-size:0.95em;"></p>
+    <div class="modal-actions" style="justify-content:center;">
+      <button class="glass-btn" id="confirmCancel">取消</button>
+      <button class="glass-btn danger" id="confirmOk">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ Keyboard Editor Modal ═══════════ -->
+<div class="modal-overlay" id="kbdModal">
+  <div class="modal-box" style="width:500px;">
+    <h3><img src="icons/button.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> 键盘消息</h3>
+    <textarea id="kbdContentInput" style="width:100%;height:80px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;resize:vertical;font-family:var(--font);font-size:0.9em;margin-bottom:8px;" placeholder="输入消息内容…"></textarea>
+    <label style="font-size:0.8em;color:var(--text-dim);">键盘 JSON（对应 keyboard 字段）</label>
+    <textarea id="kbdJsonInput" style="width:100%;height:160px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:0.78em;resize:vertical;outline:none;margin-top:4px;" placeholder='{&#10;  "content": {&#10;    "rows": [&#10;      {&#10;        "buttons": [&#10;          {&#10;            "id": "btn_1",&#10;            "render_data": { "label": "按钮", "style": 1 },&#10;            "action": { "type": 2, "permission": { "type": 2 }, "data": "/命令" }&#10;          }&#10;        ]&#10;      }&#10;    ]&#10;  }&#10;}' spellcheck="false"></textarea>
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="glass-btn" id="btnCancelKbd">取消</button>
+      <button class="glass-btn active" id="btnSendKbd">发送</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ Custom Message Modal ═══════════ -->
+<div class="modal-overlay" id="customMsgModal">
+  <div class="modal-box" style="width:500px;">
+    <h3><img src="icons/custom.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> 自定义消息</h3>
+    <textarea id="customMsgJson" style="width:100%;height:320px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:0.78em;resize:vertical;outline:none;margin:12px 0;" placeholder='{&#10;  "msg_type": 0,&#10;  "content": "Hello",&#10;  "keyboard": { ... },&#10;  "message_reference": { ... }&#10;}' spellcheck="false"></textarea>
+    <div class="modal-actions">
+      <button class="glass-btn" id="btnCancelCustom">取消</button>
+      <button class="glass-btn active" id="btnSendCustom">发送</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ Card Editor Modal ═══════════ -->
+<div class="modal-overlay" id="cardModal">
+  <div class="modal-box" style="width:480px;">
+    <h3><img src="icons/card.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> 卡片消息</h3>
+    <div style="display:flex;gap:8px;margin:12px 0;">
+      <button class="theme-btn active" id="cardTypeTuwen" onclick="switchCardType('tuwen')">图文类型</button>
+      <button class="theme-btn" id="cardTypeOther" onclick="switchCardType('other')">其他类型</button>
+    </div>
+    <!-- 图文类型表单 -->
+    <div id="cardFormTuwen">
+      <input type="text" id="cardTitle" placeholder="卡片标题" autocomplete="off" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;margin-bottom:8px;">
+      <input type="text" id="cardDesc" placeholder="卡片简介" autocomplete="off" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;margin-bottom:8px;">
+      <input type="text" id="cardPicUrl" placeholder="介绍图地址 (https://...)" autocomplete="off" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;margin-bottom:8px;">
+      <input type="text" id="cardJumpUrl" placeholder="跳转 URL (https://...)" autocomplete="off" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;margin-bottom:8px;">
+    </div>
+    <!-- 其他类型 JSON 编辑器 -->
+    <div id="cardFormOther" style="display:none;">
+      <textarea id="cardJsonInput" style="width:100%;height:180px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:0.8em;resize:vertical;outline:none;" placeholder='{&#10;  "type": "...",&#10;  ...&#10;}' spellcheck="false"></textarea>
+    </div>
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="glass-btn" id="btnCancelCard">取消</button>
+      <button class="glass-btn active" id="btnSendCard">发送</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ Settings Modal ═══════════ -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal-box" style="display:flex; gap:0; padding:0; width:720px; max-width:95vw; height:70vh; overflow:hidden;">
+    <!-- 左侧导航 -->
+    <div class="settings-nav" id="settingsNav">
+      <div class="settings-nav-item active" data-tab="general"><img src="icons/settings.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 通用</div>
+      <div class="settings-nav-item" data-tab="status"><img src="icons/system_status.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 状态</div>
+      <div class="settings-nav-item" data-tab="logs"><img src="icons/log.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 日志</div>
+      <div class="settings-nav-item" data-tab="account"><img src="icons/security.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 账号与安全</div>
+      <div class="settings-nav-item" data-tab="about"><img src="icons/bot.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 关于</div>
+    </div>
+    <!-- 右侧内容 -->
+    <div style="flex:1; min-width:0; padding:24px; overflow-y:auto;">
+      <!-- 通用 -->
+      <div class="settings-tab" id="tab-general">
+        <h3 style="margin-bottom:12px;"><img src="icons/appearance.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 外观</h3>
+        <div style="display:flex; gap:8px; margin-bottom:16px;">
+          <button class="theme-btn" id="themeLight" onclick="setTheme('light')"><img src="icons/light_mode.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 浅色</button>
+          <button class="theme-btn" id="themeDark" onclick="setTheme('dark')"><img src="icons/dark_mode.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 深色</button>
+          <button class="theme-btn" id="themeAuto" onclick="setTheme('auto')"><img src="icons/system.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 自动</button>
+        </div>
+        <h3 style="margin-bottom:16px;"><img src="icons/image.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 聊天背景</h3>
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+          <input type="file" id="bgFileInput" accept="image/*" style="display:none;">
+          <button class="glass-btn" id="btnPickBg"><img src="icons/browse.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 选择图片</button>
+          <button class="glass-btn danger" id="btnClearBg" style="color:var(--danger);">清除背景</button>
+        </div>
+        <label style="display:flex; align-items:center; gap:8px;">
+          透明度
+          <input type="range" id="bgOpacity" min="5" max="100" value="20" style="flex:1;">
+          <span id="bgOpacityVal">20%</span>
+        </label>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;">
+          <span style="font-size:0.9em;">桌面通知</span>
+          <label class="switch">
+            <input type="checkbox" id="chkDesktopNotify">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <p style="font-size:0.75em;color:var(--text-dim);margin-top:4px;">新消息系统通知，@我 时强提醒</p>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;">
+          <span style="font-size:0.9em;">查找聊天记录</span>
+          <button class="glass-btn" id="btnOpenMsgSearch"><img src="icons/search.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 查找</button>
+        </div>
+        <hr style="border-color:var(--border); margin:16px 0;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:0.9em; color:var(--text-dim);">清空全部聊天记录</span>
+          <button class="glass-btn danger" id="btnClearAllHistory" style="color:var(--danger);"><img src="icons/delete.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 清空全部</button>
+        </div>
+      </div>
+      <!-- 状态 -->
+      <div class="settings-tab" id="tab-status" style="display:none;">
+        <h3><img src="icons/system_status.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 运行状态</h3>
+        <div id="statusContent" style="font-size:0.85em; color:var(--text-dim);">加载中…</div>
+      </div>
+      <!-- 日志 -->
+      <div class="settings-tab" id="tab-logs" style="display:none;">
+        <h3 style="margin-bottom:8px;"><img src="icons/log.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 运行日志</h3>
+        <p style="font-size:0.8em;color:var(--text-dim);margin-bottom:8px;">最近 500 条服务端日志，每 2 秒自动刷新</p>
+        <div id="logsContent" style="height:calc(70vh - 130px);overflow-y:auto;background:rgba(0,0,0,0.12);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px;font-family:Consolas,Menlo,monospace;font-size:0.76em;line-height:1.65;white-space:pre-wrap;word-break:break-all;">加载中…</div>
+      </div>
+      <!-- 账号与安全 -->
+      <div class="settings-tab" id="tab-account" style="display:none;">
+        <h3><img src="icons/bot.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 机器人信息</h3>
+        <div style="display:flex;align-items:center;gap:14px;margin:16px 0;">
+          <div class="bot-avatar-upload" id="botAvatarUpload" title="点击上传头像">
+            <img id="botAvatarImg" style="display:none;width:100%;height:100%;border-radius:50%;object-fit:cover;">
+            <span id="botAvatarPlaceholder"><img src="icons/bot.svg" class="svg-icon" style="width:28px;height:28px;" alt=""></span>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:1.05em;" id="accountBotName">Bot</div>
+            <div class="bio-field" id="bioDisplay" style="font-size:0.85em;color:var(--text-dim);cursor:pointer;margin-top:2px;"></div>
+            <input type="text" id="bioInput" style="display:none;font-size:0.85em;padding:4px 8px;border-radius:6px;border:1px solid var(--accent);background:var(--bg);color:var(--text);outline:none;width:100%;margin-top:2px;" placeholder="写一句简介…" maxlength="50">
+          </div>
+        </div>
+        <input type="file" id="botAvatarFile" accept="image/*" style="display:none;">
+        <hr style="border-color:var(--border);margin:16px 0;">
+        <h3><img src="icons/security.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 安全</h3>
+        <p style="font-size:0.85em;color:var(--text-dim);margin:12px 0;">已设置访问密码保护</p>
+        <button class="glass-btn danger" id="btnLogout" style="color:var(--danger);width:100%;"><img src="icons/logout.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 退出登录</button>
+      </div>
+      <!-- 关于 -->
+      <div class="settings-tab" id="tab-about" style="display:none; text-align:center;">
+        <h3>关于</h3>
+        <p style="margin:12px 0;"><img src="icons/bot.svg" class="svg-icon" style="width:48px;height:48px;" alt=""></p>
+        <p style="font-size:1.2em;font-weight:700;margin:8px 0;">NeonBot v26.8.3</p>
+        <a href="/api/readme" target="_blank" style="color:var(--accent);font-size:0.9em;display:block;margin-top:16px;"><img src="icons/documents.svg" class="svg-icon" style="width:14px;height:14px;" alt=""> 阅读 README.md</a>
+        <p style="color:var(--text-dim);font-size:0.85em;margin-top:12px;">Copyright © 2026 Neon. All Rights Reserved.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ Context Menu ═══════════ -->
+<div class="context-menu" id="ctxMenu">
+  <div class="ctx-item" id="ctxCopy"><img src="icons/copy.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 复制</div>
+  <div class="ctx-item" id="ctxForward"><img src="icons/share.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 转发</div>
+  <div class="ctx-item" id="ctxFavorite"><img src="icons/favourite.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 收藏</div>
+  <div class="ctx-item" id="ctxQuote"><img src="icons/quote.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 引用</div>
+  <div class="ctx-item" id="ctxMultiSelect"><img src="icons/multiple_choice.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 多选</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="ctxRecall"><img src="icons/recall.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 撤回</div>
+  <div class="ctx-item danger" id="ctxDelete"><img src="icons/delete.svg" class="svg-icon ctx-icon" style="width:16px;height:16px;" alt=""><img src="icons/delete_black.svg" class="svg-icon ctx-icon-hover" style="width:16px;height:16px;" alt=""> 删除</div>
+</div>
+
+<!-- ═══════════ Conversation Context Menu ═══════════ -->
+<div class="context-menu" id="convCtxMenu">
+  <div class="ctx-item" id="convCtxPin"><img src="icons/up.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 置顶</div>
+  <div class="ctx-item" id="convCtxMute"><img src="icons/donotdisturb.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 消息免打扰</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="convCtxHide"><img src="icons/hidden.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 不显示会话</div>
+  <div class="ctx-item danger" id="convCtxDelete"><img src="icons/delete.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 删除聊天</div>
+</div>
+
+<!-- ═══════════ Batch Action Bar ═══════════ -->
+<div class="batch-bar" id="batchBar">
+  <span id="batchCount">已选 0 条</span>
+  <button class="glass-btn" id="btnCancelSelect">取消</button>
+  <button style="background:var(--danger);color:#fff;padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-weight:600;" id="btnBatchDelete"><img src="icons/delete.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 批量删除</button>
+</div>
+
+<!-- ═══════════ Favorites Modal ═══════════ -->
+<div class="modal-overlay" id="favModal">
+  <div class="modal-box" style="max-height:70vh;overflow-y:auto;width:520px;max-width:95vw;">
+    <h3><img src="icons/favourite.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 收藏列表</h3>
+    <div id="favList" style="max-height:50vh;overflow-y:auto;"></div>
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="glass-btn" id="btnCloseFav">关闭</button>
+      <button class="glass-btn danger" id="btnClearFav" style="color:var(--danger);">清空全部</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ Forward Modal ═══════════ -->
+<div class="modal-overlay" id="forwardModal">
+  <div class="modal-box">
+    <h3><img src="icons/share.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 转发消息</h3>
+    <label>目标群聊</label>
+    <select id="forwardTarget" style="width:100%;padding:8px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);margin-bottom:12px;"></select>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="btnCancelForward">取消</button>
+      <button class="glass-btn active" id="btnOkForward">转发</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ Toast Container ═══════════ -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ═══════════ Image Lightbox ═══════════ -->
+<div class="lightbox" id="lightbox">
+  <div class="lightbox-backdrop" id="lightboxBackdrop"></div>
+  <button class="lightbox-close" id="lightboxClose" title="关闭 (Esc)"><img src="icons/close.svg" class="svg-icon" style="width:16px;height:16px;" alt=""></button>
+  <button class="lightbox-nav lightbox-prev" id="lightboxPrev" title="上一张 (←)">‹</button>
+  <img id="lightboxImg" alt="">
+  <video id="lightboxVideo" controls autoplay playsinline style="display:none;max-width:92vw;max-height:86vh;border-radius:8px;background:#000;box-shadow:0 10px 50px rgba(0,0,0,0.6);" preload="metadata"></video>
+  <div class="lightbox-error" id="lightboxError" style="display:none;">图片已过期</div>
+  <div class="lightbox-zoom" id="lightboxZoom" style="display:none;">100%</div>
+  <button class="lightbox-nav lightbox-next" id="lightboxNext" title="下一张 (→)">›</button>
+  <div class="lightbox-counter" id="lightboxCounter"></div>
+</div>
+
+<!-- ═══════════ Chat Area ═══════════ -->
+<main class="chat-area" id="chatArea">
+  <div class="chat-header" id="chatHeader" style="display:none;">
+    <button class="mobile-back-btn" id="mobileBackBtn" title="返回">←</button>
+    <div class="avatar-small" id="chatAvatar">#</div>
+    <span class="header-name" id="chatName">选择会话</span>
+    <button class="btn-settings" id="btnSettings" title="设置备注"><img src="icons/settings.svg" class="svg-icon" style="width:16px;height:16px;" alt=""></button>
+  </div>
+  <div class="chat-empty" id="chatEmpty" style="overflow-y:auto;">
+    <div id="homeStats" style="width:100%;max-width:540px;text-align:left;">加载中…</div>
+  </div>
+  <div class="messages" id="messages" style="display:none;"></div>
+  <div class="input-area" id="inputArea" style="display:none;flex-direction:column;">
+    <div class="input-quote-bar" id="inputQuoteBar" style="display:none;">
+      <div class="input-quote-content">
+        <div class="input-quote-sender" id="inputQuoteSender"></div>
+        <div class="input-quote-text" id="inputQuoteText"></div>
+      </div>
+      <button class="input-quote-close" id="inputQuoteClose" title="取消引用"><img src="icons/close.svg" class="svg-icon" style="width:12px;height:12px;" alt=""></button>
+    </div>
+    <div style="display:flex;gap:10px;align-items:flex-end;width:100%;">
+    <textarea id="msgInput" rows="1" placeholder="输入消息… (Enter 发送, Shift+Enter 换行)" disabled></textarea>
+    <label class="md-toggle" id="mdToggle" title="发送为 Markdown" style="display:none;"><input type="checkbox" id="mdCheckbox"> MD</label>
+    <button class="md-toggle" id="richMediaBtn" title="发送富媒体">＋</button>
+    <button id="sendBtn" disabled>发送</button>
+    </div>
+  </div>
+
+<!-- ═══════════ Rich Media Menu ═══════════ -->
+<div class="context-menu" id="richMenu" style="display:none;">
+  <div class="ctx-item" id="richImage" onclick="pickRichMedia('image')"><img src="icons/image.svg" class="svg-icon" style="width:16px;height:16px;" alt="">  图片</div>
+  <div class="ctx-item" id="richVideo" onclick="pickRichMedia('video')"><img src="icons/video.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 视频</div>
+  <div class="ctx-item" id="richVoice" onclick="pickRichMedia('voice')"><img src="icons/audio.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 语音</div>
+  <div class="ctx-item" id="richFileSend" onclick="pickRichMedia('file')"><img src="icons/documents.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 文件</div>
+  <div class="ctx-item" id="richCard" onclick="openCardEditor()"><img src="icons/card.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 卡片</div>
+  <div class="ctx-item" id="richKbd" onclick="openKeyboardEditor()"><img src="icons/button.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 键盘</div>
+  <div class="ctx-item" id="richCustom" onclick="openCustomMsgEditor()" style="display:none;"><img src="icons/custom.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 自定义消息</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="richMD" onclick="toggleMD()"><img src="icons/markdown.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> Markdown<span style="float:right;color:var(--text-dim);font-size:0.8em;" id="mdMenuStatus"></span></div>
+  <div class="ctx-item" id="richExpand" onclick="toggleExpandInput()"><img src="icons/keyboard.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 展开输入<span style="float:right;color:var(--text-dim);font-size:0.8em;" id="expandMenuStatus"></span></div>
+</div>
+<input type="file" id="richFileInput" accept="image/*" style="display:none;">
+</main>
+
+<script src="js/utils.js?v=26.8.2"></script>
+<script src="js/core.js?v=26.8.2"></script>
+<script src="js/messages.js?v=26.8.2"></script>
+<script src="js/lightbox.js?v=26.8.2"></script>
+<script src="js/contextmenu.js?v=26.8.2"></script>
+<script src="js/settings.js?v=26.8.2"></script>
+</body>
+</html>

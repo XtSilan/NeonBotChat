@@ -140,6 +140,16 @@ async def rename_conversation(conv_id: str, name: str) -> None:
     await asyncio.to_thread(_do)
 
 
+async def delete_conversation(conv_id: str) -> None:
+    """删除整个会话及其全部消息（messages 外键级联删除）"""
+    def _do():
+        conn = get_db()
+        conn.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
+        conn.commit()
+        conn.close()
+    await asyncio.to_thread(_do)
+
+
 async def clear_messages(conv_id: str) -> None:
     """清空某个会话的所有消息"""
     def _do():
@@ -320,6 +330,50 @@ async def search_messages(q: str, limit: int = 50, conv_id: str = "") -> list[di
         rows = conn.execute(sql, args).fetchall()
         conn.close()
         return [dict(r) for r in rows]
+    return await asyncio.to_thread(_do)
+
+
+async def get_all_messages(conv_id: str) -> list[dict]:
+    """导出用：取会话全部消息（按时间正序）"""
+    def _do():
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT * FROM messages WHERE conversation_id = ? ORDER BY id ASC", (conv_id,)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    return await asyncio.to_thread(_do)
+
+
+async def get_stats() -> dict:
+    """会话数据统计：今日收发消息数、近 7 天活跃群 TOP5、总消息数"""
+    def _do():
+        conn = get_db()
+        today = conn.execute("""
+            SELECT direction, COUNT(*) AS cnt FROM messages
+            WHERE date(timestamp) = date('now', 'localtime')
+            GROUP BY direction
+        """).fetchall()
+        top = conn.execute("""
+            SELECT c.name AS name, c.id AS conv_id, COUNT(*) AS cnt FROM messages m
+            LEFT JOIN conversations c ON c.id = m.conversation_id
+            WHERE m.timestamp >= datetime('now', 'localtime', '-7 days')
+            GROUP BY m.conversation_id
+            ORDER BY cnt DESC LIMIT 5
+        """).fetchall()
+        total = conn.execute("SELECT COUNT(*) AS cnt FROM messages").fetchone()["cnt"]
+        conn.close()
+        stats = {"incoming": 0, "outgoing": 0}
+        for r in today:
+            stats[r["direction"]] = r["cnt"]
+        return {
+            "today": stats,
+            "total": total,
+            "top_convs": [
+                {"name": r["name"] or r["conv_id"], "conv_id": r["conv_id"], "count": r["cnt"]}
+                for r in top
+            ],
+        }
     return await asyncio.to_thread(_do)
 
 

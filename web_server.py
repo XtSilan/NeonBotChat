@@ -91,7 +91,7 @@ document.getElementById('pwd').addEventListener('keydown', function(e) {
 </script></body></html>"""
 
 # 静态文件
-TEMPLATES = os.path.join(os.path.dirname(__file__), "templates")
+TEMPLATES = os.path.join(os.path.dirname(__file__), "web")
 if os.path.isdir(TEMPLATES):
     app.mount("/static", StaticFiles(directory=TEMPLATES), name="static")
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
@@ -175,6 +175,11 @@ async def api_login(request: Request):
         resp.set_cookie("nb_pwd", WEBUI_PASSWORD, max_age=86400 * 30, httponly=True)
         return resp
     return JSONResponse({"error": "密码错误"}, status_code=401)
+
+
+# 拆分后的 CSS / JS 静态文件
+app.mount("/css", StaticFiles(directory=os.path.join(TEMPLATES, "css")), name="css")
+app.mount("/js", StaticFiles(directory=os.path.join(TEMPLATES, "js")), name="js")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -371,6 +376,43 @@ async def api_save_settings(request: Request):
     return {"ok": True}
 
 
+@app.get("/api/export/{conv_id}")
+async def api_export(conv_id: str, format: str = "md"):
+    """导出聊天记录为 Markdown 或 JSON"""
+    import urllib.parse
+    from database import get_all_messages, get_conversation
+
+    msgs = await get_all_messages(conv_id)
+    conv = await get_conversation(conv_id)
+    name = (conv or {}).get("name") or conv_id
+    if format == "json":
+        content = json.dumps(msgs, ensure_ascii=False, indent=2)
+        media_type = "application/json"
+        filename = f"{name}.json"
+    else:
+        lines = [f"# {name}\n"]
+        for m in msgs:
+            who = m["sender_name"] or m["sender_openid"] or ("Bot" if m["direction"] == "outgoing" else "未知用户")
+            body = m["content"] or "[媒体消息]"
+            lines.append(f"**{who}** ({m['timestamp']}):\n\n{body}\n")
+        content = "\n".join(lines)
+        media_type = "text/markdown; charset=utf-8"
+        filename = f"{name}.md"
+    encoded = urllib.parse.quote(filename)
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"},
+    )
+
+
+@app.get("/api/stats")
+async def api_stats():
+    """会话数据统计：今日收发、活跃群 TOP5、总消息数"""
+    from database import get_stats
+    return await get_stats()
+
+
 @app.get("/api/logs")
 async def api_logs(since: int = Query(0)):
     """返回服务端日志（增量拉取，保留最近 500 条）"""
@@ -507,6 +549,14 @@ async def api_update_conversation(conv_id: str, request: Request):
         return JSONResponse({"error": "没有可更新的字段"}, status_code=400)
 
     return {"ok": True, "id": conv_id, "name": new_name, **flags}
+
+
+@app.delete("/api/conversations/{conv_id}")
+async def api_delete_conversation(conv_id: str):
+    """删除会话（含全部聊天记录）"""
+    from database import delete_conversation
+    await delete_conversation(conv_id)
+    return {"ok": True}
 
 
 @app.delete("/api/messages")
