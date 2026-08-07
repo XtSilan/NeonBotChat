@@ -59,6 +59,7 @@ function onMsgContextMenu(e) {
   $('#ctxRecall').style.display = recallOk ? '' : 'none';
   $('#ctxMultiSelect').style.display = '';
   $convCtxMenu.style.display = 'none';
+  $clearCtxMenu.style.display = 'none';
   $ctxMenu.style.display = 'block';
   // 先显示才能量高度
   const menuH = $ctxMenu.offsetHeight || 120;
@@ -72,10 +73,81 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('.context-menu')) {
     $ctxMenu.style.display = 'none';
     $convCtxMenu.style.display = 'none';
+    $clearCtxMenu.style.display = 'none';
     // 不在这里清空 ctxTargetMsg，让转发/收藏弹窗还能用到
     // 弹窗关闭时各自负责清理
   }
 });
+
+// ── 聊天区空白右键：清屏（仅清 DOM，不删记录）───────
+const $clearCtxMenu = $('#clearCtxMenu');
+
+$messages.addEventListener('contextmenu', (e) => {
+  // 气泡/媒体内容区由消息菜单处理，其余全部走清屏菜单
+  const contentEl = e.target.closest ? e.target.closest('.msg-bubble, .img-placeholder, .msg-audio, .file-card') : null;
+  if (contentEl) return;
+  e.preventDefault();
+  $ctxMenu.style.display = 'none';
+  $convCtxMenu.style.display = 'none';
+  $clearCtxMenu.style.display = 'block';
+  const menuH = $clearCtxMenu.offsetHeight || 60;
+  let top = e.clientY;
+  if (e.clientY + menuH > window.innerHeight) top = e.clientY - menuH;
+  $clearCtxMenu.style.left = Math.min(e.clientX, window.innerWidth - 140) + 'px';
+  $clearCtxMenu.style.top = Math.max(0, top) + 'px';
+});
+
+$('#ctxClearScreen').addEventListener('click', () => {
+  $clearCtxMenu.style.display = 'none';
+  $messages.innerHTML = '';
+  showToast('✓ 已清屏');
+});
+
+// ── iOS Safari：长按消息 = 右键菜单 ──────────────────
+let longPressTimer = null;
+let longPressX = 0, longPressY = 0;
+let longPressFired = false;
+let longPressTarget = null;
+
+$messages.addEventListener('touchstart', (e) => {
+  if (e.touches.length !== 1) return;
+  const t = e.touches[0];
+  longPressX = t.clientX;
+  longPressY = t.clientY;
+  longPressFired = false;
+  longPressTarget = e.target;
+  longPressTimer = setTimeout(() => {
+    longPressFired = true;
+    longPressTimer = null;
+    const row = longPressTarget && longPressTarget.closest ? longPressTarget.closest('.msg-row') : null;
+    if (!row) return;
+    // 模拟右键事件触发消息菜单
+    const ev = { clientX: longPressX, clientY: longPressY, preventDefault: () => {}, target: row };
+    onMsgContextMenu.call(row, ev);
+  }, 500);
+}, { passive: true });
+
+$messages.addEventListener('touchmove', (e) => {
+  if (!longPressTimer) return;
+  const t = e.touches[0];
+  if (Math.abs(t.clientX - longPressX) > 10 || Math.abs(t.clientY - longPressY) > 10) {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;  // 移动即取消（滚动/滑动）
+  }
+}, { passive: true });
+
+$messages.addEventListener('touchend', () => {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+});
+
+// 长按触发菜单后，阻止抬起手指时产生的点击穿透（如打开灯箱）
+$messages.addEventListener('click', (e) => {
+  if (longPressFired) {
+    longPressFired = false;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+}, true);
 
 // ── 会话右键菜单（置顶 / 免打扰 / 不显示）───────────────
 const $convCtxMenu = $('#convCtxMenu');
@@ -96,6 +168,7 @@ $convList.addEventListener('contextmenu', (e) => {
   $('#convCtxMute').innerHTML = `<img src="icons/${conv.muted ? 'disturb' : 'donotdisturb'}.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> ${conv.muted ? '取消免打扰' : '消息免打扰'}`;
   $('#convCtxHide').innerHTML = `<img src="icons/${conv.hidden ? 'show' : 'hidden'}.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> ${conv.hidden ? '显示会话' : '不显示会话'}`;
   $ctxMenu.style.display = 'none';
+  $clearCtxMenu.style.display = 'none';
   $convCtxMenu.style.display = 'block';
   const menuH = $convCtxMenu.offsetHeight || 120;
   let top = e.clientY;
@@ -125,14 +198,7 @@ async function toggleConvFlag(field) {
   if (field === 'hidden' && newVal) {
     const i = conversations.findIndex(c => c.id === ctxConvId);
     if (i >= 0) conversations.splice(i, 1);
-    if (currentConv === ctxConvId) {
-      currentConv = '';
-      $chatEmpty.style.display = 'flex';
-      $messages.style.display = 'none';
-      $chatHeader.style.display = 'none';
-      $inputArea.style.display = 'none';
-      $msgInput.disabled = true;
-    }
+    if (currentConv === ctxConvId) closeChatToHome();
   }
   renderConvList($searchInput.value);
   const label = field === 'pinned' ? (newVal ? '已置顶' : '已取消置顶')
@@ -162,14 +228,7 @@ $('#convCtxDelete').addEventListener('click', async () => {
     if (si >= 0) searchResults.splice(si, 1);
   }
   // 若正在查看该会话，关闭聊天区
-  if (currentConv === ctxConvId) {
-    currentConv = '';
-    $chatEmpty.style.display = 'flex';
-    $messages.style.display = 'none';
-    $chatHeader.style.display = 'none';
-    $inputArea.style.display = 'none';
-    $msgInput.disabled = true;
-  }
+  if (currentConv === ctxConvId) closeChatToHome();
   renderConvList($searchInput.value);
   showToast('✓ 已删除聊天');
 });

@@ -53,6 +53,24 @@ CLIENT_SECRET = config["secret"]
 
 _log = botpy_logging.get_logger("NeonBotChat")
 
+# 日志文件统一写入 logs/ 目录（不再散落根目录）
+import logging as _std_logging
+from logging.handlers import TimedRotatingFileHandler as _TRFH
+_log_dir = os.path.join(os.path.dirname(__file__), "logs")
+os.makedirs(_log_dir, exist_ok=True)
+botpy_logging.configure_logging(
+    ext_handlers=[{
+        "handler": _TRFH,
+        "filename": os.path.join(_log_dir, "%(name)s.log"),
+        "when": "D",
+        "backupCount": 7,
+        "encoding": "utf-8",
+        "format": "%(asctime)s\t[%(levelname)s]\t(%(filename)s:%(lineno)s)%(funcName)s\t%(message)s",
+        "level": _std_logging.INFO,
+    }],
+    force=True,
+)
+
 # 日志环形缓冲（供 WebUI「日志」页读取，保留最近 500 条）
 from LogBuffer import install as install_log_buffer
 install_log_buffer()
@@ -191,6 +209,10 @@ class MyClient(botpy.Client):
             from database import is_echo
             if is_author_bot(msg_id) and is_echo(group_id, content):
                 _log.debug("[去重] 跳过 Bot 回显: %s", content[:40])
+                return
+            # Bot 自己发的特殊消息占位回显（卡片/键盘），前端已用真实内容渲染，跳过
+            if is_author_bot(msg_id) and (content == "[卡片消息]" or content.startswith("[键盘] ")):
+                _log.debug("[去重] 跳过特殊消息占位回显: %s", content[:30])
                 return
 
             # 处理表情标记

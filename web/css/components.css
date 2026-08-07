@@ -112,8 +112,9 @@ body.light .switch input:checked + .slider { background: #3b82f6; }
 .msg-row.out .msg-bubble { background: var(--bubble-out); color: #fff; border-top-right-radius: 4px; }
 /* 纯媒体消息（图片/视频/语音）无气泡底 */
 .msg-bubble.media-only { background: transparent !important; padding: 0; border-radius: 0; }
-.msg-bubble.media-only .img-placeholder { background: transparent; margin-bottom: 0; }
+.msg-bubble.media-only .img-placeholder { background: transparent; margin-bottom: 0; padding: 0; border: 0; }
 .msg-bubble.media-only .msg-image, .msg-bubble.media-only .msg-video { margin-bottom: 0; }
+.msg-bubble.media-only .media-expired { background: transparent; margin-bottom: 0; }
 .admin-badge {
   display: inline-block; font-size: 0.75em; font-weight: 600;
   background: #1b3a4e; color: #0066cc;
@@ -267,6 +268,103 @@ body.light .toast .svg-icon { filter: invert(1); }
 .select-mode .msg-row.selected .msg-checkbox .svg-icon { filter: invert(1) !important; }
 
 /* ── Status Cards ───────────────────────────── */
+/* 确认弹窗键盘焦点高亮 */
+.glass-btn.kb-focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 卡片消息（msg_type=8）：标题/描述 + 右侧图片 + 分割线 + 下划线链接，整体描边 */
+.card-msg {
+  display: flex; flex-direction: column;
+  max-width: 320px; overflow: hidden;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+}
+.card-msg-main { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
+.card-msg-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.card-msg-title { font-weight: 700; font-size: 0.95em; }
+.msg-row.in .card-msg-title { color: var(--text); }
+.msg-row.out .card-msg-title { color: #fff; }
+.card-msg-desc {
+  font-size: 0.85em; color: var(--text-dim); white-space: pre-wrap;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.msg-row.out .card-msg-desc { color: rgba(255,255,255,0.85); }
+.card-msg-pic {
+  width: 64px; height: 64px; border-radius: 8px; object-fit: cover;
+  flex-shrink: 0;
+}
+.card-msg-sep { height: 1px; background: rgba(255,255,255,0.22); }
+.msg-row.in .card-msg-sep { background: rgba(0,0,0,0.15); }
+.card-msg-link {
+  display: block; font-size: 0.82em; color: var(--accent);
+  text-decoration: underline; word-break: break-all; padding: 8px 14px;
+}
+.msg-row.out .card-msg-link { color: #fff; }
+
+/* 链接卡片（消息内 URL 渲染，预加载标题/描述/图标） */
+.link-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; margin: 4px 0; border-radius: 10px;
+  background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+  color: var(--text); font-size: 0.85em; text-decoration: none;
+  cursor: pointer; max-width: 340px;
+}
+.link-card:hover { background: rgba(255,255,255,0.1); border-color: var(--accent); }
+body.light .link-card { background: rgba(0,0,0,0.05); }
+.lc-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.lc-title {
+  font-weight: 700; font-size: 0.92em; color: var(--text);
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+}
+.msg-row.out .lc-title { color: #fff; }  /* 自己的卡片标题白色 */
+.lc-desc {
+  font-size: 0.8em; color: var(--text-dim);
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+/* 卡片上方的原链接文字（带下划线，字号加大；别人的蓝色、自己的白色） */
+.lc-ext {
+  display: block; font-size: 0.85em; color: var(--text-dim);
+  margin: 4px 2px 2px; word-break: break-all;
+  text-decoration: underline;
+}
+.msg-row.in .lc-ext { color: var(--accent); }
+.msg-row.out .lc-ext { color: #fff; }
+.lc-ext:hover { color: var(--accent); }
+.lc-icon {
+  width: 48px; height: 48px; border-radius: 8px; object-fit: contain;
+  flex-shrink: 0; background: rgba(255,255,255,0.08); padding: 4px;
+}
+
+/* 拖拽发送遮罩 */
+.drop-overlay {
+  position: absolute; inset: 8px; z-index: 30;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(30, 31, 35, 0.55);
+  border: 2px dashed var(--accent); border-radius: 12px;
+  pointer-events: none;
+  color: var(--text); font-size: 1.1em; font-weight: 700;
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+
+/* 聊天区切换动画（返回主页向上收 / 进入聊天向下展开） */
+@keyframes slideUpFade { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-26px); } }
+@keyframes slideDownFade { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: translateY(0); } }
+.anim-slide-up { animation: slideUpFade 0.25s ease forwards; }
+.anim-slide-down { animation: slideDownFade 0.25s ease forwards; }
+
+/* 主侧栏切换动画（主页模式向左收，消息模式向右弹出） */
+@keyframes sidebarOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(-100%); } }
+@keyframes sidebarIn { from { opacity: 0; transform: translateX(-100%); } to { opacity: 1; transform: translateX(0); } }
+.anim-sidebar-out { animation: sidebarOut 0.25s ease forwards; }
+.anim-sidebar-in { animation: sidebarIn 0.25s ease forwards; }
+
+
+/* iOS Safari：禁用长按系统菜单/文本选择（长按改为右键菜单） */
+.messages, .messages .msg-row {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 /* ── 群聊的聊天记录卡片 ──────────────────────────── */
 .chat-record {
   background: rgba(255,255,255,0.05); border-radius: 8px;
@@ -281,7 +379,8 @@ body.light .toast .svg-icon { filter: invert(1); }
 }
 .cr-sender { font-weight: 600; color: var(--text); margin-right: 6px; }
 .cr-more { font-size: 0.75em; color: var(--accent); margin-top: 4px; }
-.cr-bubble-row { display: flex; margin-bottom: 6px; }
+.cr-bubble-row { display: flex; flex-direction: column; margin-bottom: 8px; align-items: flex-start; }
+.cr-sender-name { font-size: 0.75em; color: var(--text-dim); margin-bottom: 2px; display: flex; align-items: center; gap: 4px; }
 .cr-bubble-row.out { justify-content: flex-end; }
 .cr-bubble { max-width: 82%; padding: 8px 12px; border-radius: 10px; font-size: 0.88em; line-height: 1.5; word-break: break-word; white-space: pre-wrap; }
 .cr-bubble.in { background: var(--bubble-in); }
@@ -291,14 +390,27 @@ body.light .toast .svg-icon { filter: invert(1); }
   background: rgba(255,255,255,0.04); border-radius: 8px;
   padding: 10px 14px; margin-bottom: 8px;
 }
-/* 首页统计看板卡片：明显垫底 */
+/* 首页统计看板卡片：网格布局 + 明显垫底 + 鼠标聚焦光效 */
+#homeStats {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
 #homeStats .stat-card {
+  position: relative; overflow: hidden;
   background: rgba(30, 31, 35, 0.55);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255,255,255,0.14);
   box-shadow: 0 2px 10px rgba(0,0,0,0.25);
-  padding: 14px 16px; border-radius: 10px;
+  padding: 18px 20px; border-radius: 12px;
+  margin-bottom: 0; min-width: 0;
 }
+.stat-spotlight {
+  position: absolute; inset: 0; pointer-events: none;
+  opacity: 0; transition: opacity 0.25s;
+  border-radius: inherit;
+}
+#homeStats .stat-card:hover .stat-spotlight { opacity: 1; }
+#homeStats .stat-val { font-size: 1.05em; }
+#homeStats .stat-label { font-size: 0.88em; }
 body.light #homeStats .stat-card {
   background: rgba(240, 241, 244, 0.65);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
@@ -319,6 +431,14 @@ body.light #homeStats .stat-card {
   flex-shrink: 0; transition: border-color 0.2s; overflow: hidden;
 }
 .bot-avatar-upload:hover { border-color: var(--accent); }
+.conv-avatar-upload {
+  width: 56px; height: 56px; border-radius: 50%;
+  border: 2px dashed var(--border); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: border-color 0.2s; overflow: hidden;
+  background: rgba(255,255,255,0.05);
+}
+.conv-avatar-upload:hover { border-color: var(--accent); }
 
 /* ── Frosted Glass Button ───────────────────── */
 .glass-btn {
@@ -326,6 +446,7 @@ body.light #homeStats .stat-card {
   background: rgba(255,255,255,0.06);
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   color: var(--text); cursor: pointer; font-size: 0.9em;
+  font-family: var(--font);
   transition: all 0.15s;
 }
 .glass-btn:hover { background: rgba(255,255,255,0.12); }

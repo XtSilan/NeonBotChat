@@ -60,6 +60,53 @@ $('#msgSearchInput').addEventListener('input', () => {
   }, 300);
 });
 
+// ── 周报导出（看板右下角浮动按钮）─────────────────
+$('#btnExportReport').addEventListener('click', exportWeeklyReport);
+
+// ── 周报导出（统计看板数据 → Markdown）─────────────
+async function exportWeeklyReport() {
+  try {
+    const st = await API('/api/stats');
+    const recv = st.today.incoming || 0;
+    const sent = st.today.outgoing || 0;
+    const media = st.media || {};
+    const lines = [
+      '# 📊 NeonBotChat 本周简报',
+      '',
+      `> 生成时间：${new Date().toLocaleString('zh-CN')}`,
+      '',
+      '## 消息概况',
+      `- 今日消息：${recv + sent} 条（收到 ${recv} / 发出 ${sent}）`,
+      `- 历史累计：${st.total} 条`,
+      `- 近7天引用回复：${st.quoted || 0} 条`,
+      '',
+      '## 每日趋势（近7天）',
+      ...(st.trend || []).map(t => `- ${t.d}：${t.count} 条`),
+      '',
+      '## 活跃群 TOP5',
+      ...(st.top_convs || []).map((c, i) => `${i + 1}. ${c.name}：${c.count} 条`),
+      '',
+      '## 媒体消息分布',
+      `- 图片 ${media.image || 0} · 视频 ${media.video || 0} · 语音 ${media.voice || 0} · 文件 ${media.file || 0}`,
+      '',
+      '## 会话参与度',
+      `- 近7天活跃会话 ${(st.convs && st.convs.active) || 0} / 总会话 ${(st.convs && st.convs.total) || 0}`,
+      '',
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `NeonBot周报_${new Date().toISOString().slice(0, 10)}.md`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+    showToast('✓ 周报已导出');
+  } catch (e) {
+    showToast('⚠ 周报生成失败');
+  }
+}
+
 // ── 首页统计看板（默认页）──────────────────────────
 async function loadHomeStats() {
   const $box = $('#homeStats');
@@ -67,6 +114,26 @@ async function loadHomeStats() {
   const html = await renderStatsHtml();
   $box.innerHTML = html || '<div style="color:var(--text-dim);text-align:center;">暂无数据</div>';
 }
+
+// 卡片鼠标聚焦光效：径向高光跟随指针
+$('#homeStats').addEventListener('mousemove', (e) => {
+  const card = e.target.closest('.stat-card');
+  if (!card) return;
+  let spot = card.querySelector('.stat-spotlight');
+  if (!spot) {
+    spot = document.createElement('div');
+    spot.className = 'stat-spotlight';
+    card.appendChild(spot);
+  }
+  const r = card.getBoundingClientRect();
+  const x = e.clientX - r.left;
+  const y = e.clientY - r.top;
+  // 深色模式白色光晕，浅色模式黑色光晕
+  const isLight = document.body.classList.contains('light');
+  spot.style.background = isLight
+    ? `radial-gradient(180px circle at ${x}px ${y}px, rgba(0,0,0,0.06), transparent 65%)`
+    : `radial-gradient(180px circle at ${x}px ${y}px, rgba(255,255,255,0.18), transparent 65%)`;
+});
 
 // ── 群聊设置 → 导出聊天记录 ─────────────────────────
 function exportChat(fmt) {
@@ -280,10 +347,59 @@ function showRenameModal() {
   const conv = conversations.find(c => c.id === currentConv);
   $renameInput.value = conv ? conv.name : '';
   $('#convOpenIdText').textContent = currentConv;
+  // 群头像预览 + 群名
+  $('#convAvatarName').textContent = conv ? (conv.name || currentConv) : currentConv;
+  const av = conv && conv.avatar_url ? conv.avatar_url : '';
+  if (av) {
+    $('#convAvatarImg').src = av;
+    $('#convAvatarImg').style.display = '';
+    $('#convAvatarPlaceholder').style.display = 'none';
+  } else {
+    $('#convAvatarImg').style.display = 'none';
+    $('#convAvatarPlaceholder').style.display = '';
+    $('#convAvatarPlaceholder').textContent = ((conv && conv.name) || currentConv || '?')[0];
+  }
   $renameModal.classList.add('show');
   $renameInput.focus();
   $renameInput.select();
 }
+
+// ── 群头像上传 ──────────────────────────────────────
+$('#convAvatarUpload').addEventListener('click', () => $('#convAvatarFile').click());
+$('#convAvatarFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file || !currentConv) return;
+  if (file.size > 2 * 1024 * 1024) { showToast('⚠ 图片不能超过 2MB'); return; }
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const r = await API(`/api/conversations/${encodeURIComponent(currentConv)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar: reader.result }),
+      });
+      if (r && r.error) { showToast('⚠ ' + r.error); return; }
+      // 更新本地会话数据
+      const conv = conversations.find(c => c.id === currentConv);
+      if (conv) conv.avatar_url = reader.result;
+      if (searchResults) {
+        const sc = searchResults.find(c => c.id === currentConv);
+        if (sc) sc.avatar_url = reader.result;
+      }
+      // 更新预览和列表
+      $('#convAvatarImg').src = reader.result;
+      $('#convAvatarImg').style.display = '';
+      $('#convAvatarPlaceholder').style.display = 'none';
+      renderConvList($searchInput.value);
+      applyChatHeaderAvatar();
+      showToast('✓ 群头像已更新');
+    } catch (err) {
+      showToast('⚠ 网络错误');
+    }
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+});
 
 // 复制群 OpenID
 $('#btnCopyConvId').addEventListener('click', async () => {
@@ -476,7 +592,7 @@ async function refreshStatus() {
     const info = await API('/api/system-info');
     $sc.innerHTML = `
       <div style="text-align:center;margin-bottom:12px;">
-        <span style="font-size:1.1em;font-weight:700;"><img src="icons/bot.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> NeonBotChat v26.8.3</span>
+        <span style="font-size:1.1em;font-weight:700;"><img src="icons/bot.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> NeonBotChat v26.8.4</span>
       </div>
       <div class="stat-card">
         <div class="stat-label"><img src="icons/system.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 系统</div>
@@ -508,11 +624,65 @@ async function refreshStatus() {
 }
 
 // ── 会话数据统计 ────────────────────────────────────
+function fmtTrendLabel(d) {
+  const today = new Date();
+  const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  if (d === ymd) return '今天';
+  const yest = new Date(Date.now() - 86400000);
+  const yestStr = `${yest.getFullYear()}-${String(yest.getMonth() + 1).padStart(2, '0')}-${String(yest.getDate()).padStart(2, '0')}`;
+  if (d === yestStr) return '昨天';
+  const [, m, day] = d.split('-');
+  return `${parseInt(m)}/${parseInt(day)}`;
+}
+
 async function renderStatsHtml() {
   try {
     const st = await API('/api/stats');
     const recv = st.today.incoming || 0;
     const sent = st.today.outgoing || 0;
+    // 近 7 天趋势柱状图
+    const trend = st.trend || [];
+    const trendMax = Math.max(1, ...trend.map(t => t.count));
+    const trendHtml = trend.map(t => {
+      const h = Math.round(t.count / trendMax * 52);
+      return `
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;">
+          <div style="font-size:0.65em;color:var(--text-dim);">${t.count}</div>
+          <div style="width:70%;background:var(--accent);border-radius:2px;height:${h}px;opacity:${t.count ? 0.85 : 0.15};"></div>
+          <div style="font-size:0.62em;color:var(--text-dim);white-space:nowrap;">${fmtTrendLabel(t.d)}</div>
+        </div>`;
+    }).join('') || '<div class="stat-sub">暂无数据</div>';
+    // 24 小时活跃分布
+    const hourly = st.hourly || {};
+    const hMax = Math.max(1, ...Object.values(hourly));
+    const hourHtml = Array.from({ length: 24 }, (_, h) => {
+      const cnt = hourly[h] || 0;
+      const barH = Math.max(2, Math.round(cnt / hMax * 42));
+      return `
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;height:48px;" title="${h}时: ${cnt}条">
+          <div style="background:${cnt ? 'var(--accent)' : 'rgba(255,255,255,0.07)'};border-radius:1px;height:${barH}px;opacity:${cnt ? 0.8 : 1};"></div>
+        </div>`;
+    }).join('');
+    // 媒体消息分布
+    const media = st.media || {};
+    const mediaTotal = Math.max(1, (media.image || 0) + (media.video || 0) + (media.voice || 0) + (media.file || 0));
+    const mediaRows = [
+      ['image', 'icons/image.svg', '图片'],
+      ['video', 'icons/video.svg', '视频'],
+      ['voice', 'icons/audio.svg', '语音'],
+      ['file', 'icons/documents.svg', '文件'],
+    ].map(([k, icon, name]) => {
+      const cnt = media[k] || 0;
+      const pct = Math.round(cnt / mediaTotal * 100);
+      return `
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+          <img src="${icon}" class="svg-icon" style="width:14px;height:14px;" alt="">
+          <span style="width:30px;font-size:0.8em;">${name}</span>
+          <div class="stat-bar" style="flex:1;margin-top:0;"><div class="stat-bar-fill" style="width:${pct}%"></div></div>
+          <span style="font-size:0.75em;color:var(--text-dim);width:44px;text-align:right;">${cnt}条</span>
+        </div>`;
+    }).join('');
+    // 活跃群 TOP5
     const topRows = (st.top_convs || []).map(c => {
       const pct = st.total ? Math.round(c.count / st.total * 100) : 0;
       return `
@@ -522,15 +692,42 @@ async function renderStatsHtml() {
           <div class="stat-bar" style="width:70px;flex-shrink:0;"><div class="stat-bar-fill" style="width:${pct}%"></div></div>
         </div>`;
     }).join('');
+    // 会话参与度
+    const convs = st.convs || {};
+    const actPct = convs.total ? Math.round((convs.active || 0) / convs.total * 100) : 0;
     return `
       <div class="stat-card">
-        <div class="stat-label"><img src="icons/query.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 今日消息</div>
+        <div class="stat-label"><img src="icons/chat.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 今日消息</div>
         <div class="stat-val">${recv + sent} 条</div>
         <div class="stat-sub">收到 ${recv} · 发出 ${sent} · 历史累计 ${st.total}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:0.78em;color:var(--text-dim);">
+          <img src="icons/quote.svg" class="svg-icon" style="width:13px;height:13px;" alt=""> 近7天引用回复 ${st.quoted || 0} 条
+        </div>
       </div>
       <div class="stat-card">
-        <div class="stat-label"><img src="icons/chat.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 活跃群 TOP5（近7天）</div>
+        <div class="stat-label"><img src="icons/chart.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 近7天消息趋势</div>
+        <div style="display:flex;align-items:flex-end;gap:4px;margin-top:8px;">${trendHtml}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label"><img src="icons/clock.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 24小时活跃分布（近7天）</div>
+        <div style="display:flex;align-items:flex-end;gap:2px;margin-top:8px;">${hourHtml}</div>
+        <div style="display:flex;justify-content:space-between;font-size:0.6em;color:var(--text-dim);margin-top:3px;">
+          <span>0时</span><span>6时</span><span>12时</span><span>18时</span><span>23时</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label"><img src="icons/media.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 媒体消息分布（近7天）</div>
+        ${mediaRows}
+      </div>
+      <div class="stat-card">
+        <div class="stat-label"><img src="icons/rank.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 活跃群 TOP5（近7天）</div>
         ${topRows || '<div class="stat-sub" style="margin-top:4px;">暂无数据</div>'}
+      </div>
+      <div class="stat-card">
+        <div class="stat-label"><img src="icons/groups.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 会话参与度</div>
+        <div class="stat-val">${convs.active || 0} / ${convs.total || 0}</div>
+        <div class="stat-sub">近7天活跃会话 / 总会话数</div>
+        <div class="stat-bar"><div class="stat-bar-fill" style="width:${actPct}%"></div></div>
       </div>`;
   } catch (e) {
     return '';
@@ -577,6 +774,13 @@ async function refreshLogs() {
     $lc.innerHTML = '<div style="color:var(--danger);">加载日志失败</div>';
   }
 }
+
+// ── 链接卡片开关（账号与安全）────────────────────────
+const $chkLinkCards = $('#chkLinkCards');
+if (localStorage.getItem('link_cards') === '0') $chkLinkCards.checked = false;
+$chkLinkCards.addEventListener('change', () => {
+  localStorage.setItem('link_cards', $chkLinkCards.checked ? '1' : '0');
+});
 
 // ── 桌面通知开关 ─────────────────────────────────────
 const $chkNotify = $('#chkDesktopNotify');
@@ -676,7 +880,20 @@ function applyBotAvatar() {
     $('#botAvatarImg').style.display = 'none';
     $('#botAvatarPlaceholder').style.display = '';
   }
+  // 侧侧栏 Bot 头像（有头像显示头像，无则 query.svg，失败回退 query.svg）
+  const rail = $('#railBotAvatar');
+  if (rail) {
+    rail.innerHTML = av
+      ? `<img src="${escHtml(av)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.outerHTML='<img src=&quot;icons/query.svg&quot; class=&quot;svg-icon&quot; style=&quot;width:22px;height:22px&quot; alt=&quot;&quot;>'">`
+      : `<img src="icons/query.svg" class="svg-icon" style="width:22px;height:22px;" alt="">`;
+  }
 }
+
+// 点击侧侧栏头像 → 打开设置并跳到「账号与安全」换头像
+$('#railBotAvatar').addEventListener('click', () => {
+  $settingsModal.classList.add('show');
+  document.querySelector('.settings-nav-item[data-tab="account"]').click();
+});
 
 $('#botAvatarUpload').addEventListener('click', () => $('#botAvatarFile').click());
 $('#botAvatarFile').addEventListener('change', async (e) => {
@@ -698,18 +915,73 @@ function updateAccountBotName() {
 }
 
 // ── 自定义确认弹窗 ────────────────────────────────────
-function showConfirm(msg, iconName = 'warning', danger = true, showCancel = true) {
+function showConfirm(msg, iconName = 'warning', danger = true, showCancel = true, thirdText = '', previewUrl = '', previewType = '') {
   return new Promise(resolve => {
     $('#confirmMsg').textContent = msg;
     $('#confirmIcon').innerHTML = '<img src="icons/' + iconName + '.svg" class="svg-icon" style="width:36px;height:36px;" alt="">';
+    // 图片/视频预览（粘贴发送用）
+    const $pv = $('#confirmPreview');
+    const $pvi = $('#confirmPreviewImg');
+    const $pvv = $('#confirmPreviewVideo');
+    if (previewUrl && (previewType === 'image' || previewType === 'video')) {
+      $pv.style.display = '';
+      if (previewType === 'image') {
+        $pvi.src = previewUrl; $pvi.style.display = '';
+        $pvv.style.display = 'none'; $pvv.removeAttribute('src');
+      } else {
+        $pvv.src = previewUrl; $pvv.style.display = '';
+        $pvi.style.display = 'none'; $pvi.removeAttribute('src');
+      }
+    } else {
+      $pv.style.display = 'none';
+      $pvi.removeAttribute('src'); $pvv.removeAttribute('src');
+    }
     const okBtn = $('#confirmOk');
     okBtn.className = danger ? 'glass-btn danger' : 'glass-btn active';
     $('#confirmCancel').style.display = showCancel ? '' : 'none';
+    // 可选第三按钮：点击 resolve 'third'
+    const thirdBtn = $('#confirmThird');
+    if (thirdText) {
+      thirdBtn.textContent = thirdText;
+      thirdBtn.className = 'glass-btn';
+      thirdBtn.style.display = '';
+    } else {
+      thirdBtn.style.display = 'none';
+    }
     $('#confirmDialog').classList.add('show');
-    const ok = () => { hideConfirm(); resolve(true); };
-    const cancel = () => { hideConfirm(); resolve(false); };
+    const ok = () => { cleanup(); hideConfirm(); resolve(true); };
+    const cancel = () => { cleanup(); hideConfirm(); resolve(false); };
+    const third = () => { cleanup(); hideConfirm(); resolve('third'); };
+    // 按钮焦点：←/→ 或 ↑/↓ 切换，Enter 触发当前高亮，Esc 取消
+    const btns = [];
+    if (thirdText) btns.push(thirdBtn);
+    if (showCancel) btns.push($('#confirmCancel'));
+    btns.push(okBtn);
+    let kbIdx = btns.length - 1;  // 默认高亮「确认」
+    const updateKbFocus = () => {
+      btns.forEach((b, i) => b.classList.toggle('kb-focus', i === kbIdx));
+    };
+    updateKbFocus();
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancel(); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault(); e.stopPropagation();
+        kbIdx = (kbIdx - 1 + btns.length) % btns.length; updateKbFocus();
+      }
+      else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault(); e.stopPropagation();
+        kbIdx = (kbIdx + 1) % btns.length; updateKbFocus();
+      }
+      else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); btns[kbIdx].click(); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    function cleanup() {
+      document.removeEventListener('keydown', onKey, true);
+      btns.forEach(b => b.classList.remove('kb-focus'));
+    }
     $('#confirmOk').onclick = ok;
     $('#confirmCancel').onclick = cancel;
+    thirdBtn.onclick = third;
     $('#confirmDialog').onclick = (e) => { if (e.target === $('#confirmDialog')) cancel(); };
   });
 }
@@ -721,6 +993,18 @@ $('#btnLogout').addEventListener('click', async () => {
   await API('/api/logout', { method: 'POST' });
   window.location.reload();
 });
+
+// ── 默认页面（主页/消息，localStorage 按浏览器独立）──
+function setDefaultView(v) {
+  localStorage.setItem('default_view', v);
+  $('#defViewHome').classList.toggle('active', v === 'home');
+  $('#defViewChat').classList.toggle('active', v === 'chat');
+}
+function setDefaultViewUI() {
+  const dv = localStorage.getItem('default_view') || 'home';
+  $('#defViewHome').classList.toggle('active', dv === 'home');
+  $('#defViewChat').classList.toggle('active', dv === 'chat');
+}
 
 // ── 深浅模式 ────────────────────────────────────────
 let systemDark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -743,6 +1027,10 @@ if (window.matchMedia) {
 }
 
 // ── 启动 ─────────────────────────────────────────────
+// 立即进入默认视图（同步执行，避免 init 异步完成后才切换造成「先消息后主页」闪烁；首次加载无动画）
+setDefaultViewUI();
+if ((localStorage.getItem('default_view') || 'home') === 'home') showHomeView(true);
+else showChatView(true);
 // init() 定义在 core.js，依赖本文件（settings.js）的函数，故在所有文件加载完后执行
 init();
 

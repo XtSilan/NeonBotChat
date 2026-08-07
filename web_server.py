@@ -376,6 +376,50 @@ async def api_save_settings(request: Request):
     return {"ok": True}
 
 
+@app.get("/api/link-preview")
+async def api_link_preview(url: str = Query(...)):
+    """抓取网页元数据（标题/描述/图标），供链接卡片渲染"""
+    import re
+    from urllib.parse import urlparse
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url,
+                timeout=aiohttp.ClientTimeout(total=5),
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"},
+            ) as resp:
+                if resp.status != 200:
+                    return {"ok": False}
+                html = await resp.text(errors="ignore")
+        # 标题
+        title = ""
+        m = re.search(r"<title[^>]*>(.*?)</title>", html, re.S | re.I)
+        if m:
+            title = re.sub(r"\s+", " ", m.group(1)).strip()[:120]
+        # 描述（description / og:description）
+        desc = ""
+        m = re.search(r'<meta[^>]+(?:name|property)=["\'](?:description|og:description)["\'][^>]+content=["\']([^"\']*)["\']', html, re.I)
+        if not m:
+            m = re.search(r'<meta[^>]+content=["\']([^"\']*)["\'][^>]+(?:name|property)=["\'](?:description|og:description)["\']', html, re.I)
+        if m:
+            desc = re.sub(r"\s+", " ", m.group(1)).strip()[:200]
+        # 图标（favicon）
+        icon = ""
+        m = re.search(r'<link[^>]+rel=["\'][^"\']*icon[^"\']*["\'][^>]+href=["\']([^"\']+)["\']', html, re.I)
+        if not m:
+            m = re.search(r'<link[^>]+href=["\']([^"\']+)["\'][^>]+rel=["\'][^"\']*icon[^"\']*["\']', html, re.I)
+        if m:
+            icon = m.group(1)
+            if icon.startswith("//"):
+                icon = "https:" + icon
+            elif icon.startswith("/"):
+                p = urlparse(url)
+                icon = f"{p.scheme}://{p.netloc}{icon}"
+        return {"ok": True, "title": title, "description": desc, "icon": icon, "url": url}
+    except Exception:
+        return {"ok": False}
+
+
 @app.get("/api/export/{conv_id}")
 async def api_export(conv_id: str, format: str = "md"):
     """导出聊天记录为 Markdown 或 JSON"""
@@ -542,6 +586,8 @@ async def api_update_conversation(conv_id: str, request: Request):
     for key in ("pinned", "muted", "hidden"):
         if key in body:
             flags[key] = 1 if body[key] else 0
+    if "avatar" in body:
+        flags["avatar"] = body["avatar"]  # 群头像（dataURL）
     if flags:
         await set_conversation_flags(conv_id, **flags)
 
@@ -652,10 +698,10 @@ async def api_send(request: Request):
     from database import mark_outgoing
     mark_outgoing(conv_id, content)
 
-    # 特殊消息用占位文本
+    # 特殊消息用占位文本（卡片消息保留原始 JSON 入库，便于前端重新渲染成卡片）
     display_content = content
     if msg_type == 8:
-        display_content = "[卡片消息]"
+        display_content = content
     elif keyboard_content is not None:
         display_content = "[键盘] " + content
 
@@ -718,6 +764,17 @@ async def api_send(request: Request):
         quote_thumbs=quote_thumbs,
         quoted_ref_idx=message_reference.get("message_id", "") if message_reference else "",
     )
+    # 卡片消息：会话列表预览用占位文本（DB 内保留原始 JSON）
+    if msg_type == 8:
+        try:
+            import sqlite3 as _sq, os as _os2
+            _c = _sq.connect(_os2.path.join(_os2.path.dirname(__file__), "neonbot.db"))
+            _c.execute("UPDATE conversations SET last_message = '[卡片消息]' WHERE id = ?", (conv_id,))
+            _c.commit()
+            _c.close()
+            saved["content"] = display_content
+        except Exception:
+            pass
 
     # 3) 广播给所有 WebUI 客户端
     await manager.broadcast({

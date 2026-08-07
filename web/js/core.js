@@ -15,7 +15,6 @@ const $inputArea = $('#inputArea');
 const $msgInput = $('#msgInput');
 const $sendBtn = $('#sendBtn');
 const $searchInput = $('#searchInput');
-const $botStatus = $('#botStatus');
 
 // ── API ─────────────────────────────────────────────
 const API = (url, opts = {}) => fetch(url, opts).then(r => r.json());
@@ -27,8 +26,7 @@ function connectWS() {
 
   ws.onopen = () => {
     console.log('[WS] connected');
-    $botStatus.textContent = '● 在线';
-    $botStatus.className = 'status';
+    $('#railStatusDot').style.background = 'var(--online)';
   };
 
   ws.onmessage = (ev) => {
@@ -57,8 +55,7 @@ function connectWS() {
   };
 
   ws.onclose = () => {
-    $botStatus.textContent = '● 离线';
-    $botStatus.className = 'status offline';
+    $('#railStatusDot').style.background = 'var(--danger)';
     setTimeout(connectWS, 3000);
   };
 
@@ -175,7 +172,7 @@ function renderConvList(filter = '') {
     : filtered.map(c => `
       <div class="conv-item${c.id === currentConv ? ' active' : ''}${c.pinned ? ' pinned' : ''}${c.hidden ? ' hidden-item' : ''}"
            data-id="${c.id}" onclick="selectConv('${c.id}')">
-        <div class="avatar">${(c.name || c.id)[0]}</div>
+        <div class="avatar">${c.avatar_url ? `<img src="${escHtml(c.avatar_url)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">` : `${(c.name || c.id)[0]}`}</div>
         <div class="info">
           <div class="name">${c.at ? '<span class="at-tag">@</span>' : ''}${escHtml(c.name || c.id)}${c.hidden ? '<span style="color:var(--text-dim);font-size:0.75em;margin-left:6px;">(已隐藏)</span>' : ''}</div>
           <div class="preview">${escHtmlWithBr(convPreview(c) || '暂无消息')}</div>
@@ -277,10 +274,127 @@ function roleBadge(role) {
 }
 
 // ── 选择会话 ────────────────────────────────────────
+// ── 聊天区切换动画 ──────────────────────────────────
+// fromEl 向上收（覆盖层滑出），toEl 向下展开
+function transitionChat(fromEl, toEl) {
+  fromEl.style.position = 'absolute';
+  fromEl.style.inset = '0';
+  fromEl.style.zIndex = '2';
+  fromEl.classList.add('anim-slide-up');
+  toEl.style.display = 'flex';
+  toEl.classList.add('anim-slide-down');
+  setTimeout(() => {
+    fromEl.style.display = 'none';
+    fromEl.style.position = '';
+    fromEl.style.inset = '';
+    fromEl.style.zIndex = '';
+    fromEl.classList.remove('anim-slide-up');
+    toEl.classList.remove('anim-slide-down');
+  }, 260);
+}
+
+// ── 视图模式：主页（沉浸式看板）/ 消息（聊天界面）───
+let viewMode = 'chat';
+
+function showHomeView(skipAnim) {
+  viewMode = 'home';
+  currentConv = '';
+  // 沉浸式：主侧栏向左滑出（覆盖层动画，动画结束再移除），侧侧栏保留
+  const sb = document.querySelector('.sidebar');
+  if (sb.style.display !== 'none' && !skipAnim) {
+    sb.style.position = 'absolute';
+    sb.style.left = '0';
+    sb.style.top = '0';
+    sb.style.bottom = '0';
+    sb.style.zIndex = '4';  // 低于侧侧栏(5)，滑出时从侧侧栏底下经过
+    sb.classList.add('anim-sidebar-out');
+    setTimeout(() => {
+      sb.style.display = 'none';
+      sb.style.position = '';
+      sb.style.left = '';
+      sb.style.top = '';
+      sb.style.bottom = '';
+      sb.style.zIndex = '';
+      sb.classList.remove('anim-sidebar-out');
+    }, 260);
+  } else {
+    sb.style.display = 'none';  // 首次加载：直接隐藏无动画
+  }
+  $('#homeStats').style.display = '';
+  loadHomeStats();
+  $('#chatEmptyHint').style.display = 'none';
+  $('#btnExportReport').style.display = '';  // 主页模式显示导出周报
+  $('#railHomeBtn').classList.add('active');
+  $('#railMsgBtn').classList.remove('active');
+  // 切换动画：聊天区向上收，看板弹出
+  if ($messages.style.display !== 'none') transitionChat($messages, $chatEmpty);
+  else {
+    $chatEmpty.style.display = 'flex';
+    $chatEmpty.classList.add('anim-slide-down');
+    setTimeout(() => $chatEmpty.classList.remove('anim-slide-down'), 300);
+  }
+  $chatHeader.style.display = 'none';
+  $inputArea.style.display = 'none';
+  $msgInput.disabled = true;
+  $sendBtn.disabled = true;
+}
+
+function showChatView(skipAnim) {
+  viewMode = 'chat';
+  currentConv = '';
+  renderConvList($searchInput.value);  // 清除会话高亮
+  // 主侧栏向右弹出（首次加载直接显示无动画）
+  const sb = document.querySelector('.sidebar');
+  sb.style.display = '';
+  if (!skipAnim) {
+    sb.classList.add('anim-sidebar-in');
+    setTimeout(() => sb.classList.remove('anim-sidebar-in'), 300);
+  }
+  $('#homeStats').style.display = 'none';
+  $('#chatEmptyHint').style.display = 'flex';
+  $('#btnExportReport').style.display = 'none';
+  $('#railMsgBtn').classList.add('active');
+  $('#railHomeBtn').classList.remove('active');
+  // 切换动画：看板/聊天区向上收，回到「选择一个聊天」弹出
+  if ($messages.style.display !== 'none') transitionChat($messages, $chatEmpty);
+  else {
+    $chatEmpty.style.display = 'flex';
+    $chatEmpty.classList.add('anim-slide-down');
+    setTimeout(() => $chatEmpty.classList.remove('anim-slide-down'), 300);
+  }
+  $chatHeader.style.display = 'none';
+  $inputArea.style.display = 'none';
+  $msgInput.disabled = true;
+  $sendBtn.disabled = true;
+  // 手机端：退出全屏聊天
+  if (window.innerWidth <= 768) {
+    document.getElementById('chatArea').classList.remove('mobile-open');
+  }
+}
+
+// 删除聊天/隐藏会话后回到聊天视图
+function closeChatToHome() { showChatView(); }
+
+$('#railHomeBtn').addEventListener('click', showHomeView);
+$('#railMsgBtn').addEventListener('click', showChatView);
+$('#railMsgBtn').classList.add('active');  // 初始默认消息视图
+
+// 聊天顶栏头像（有群头像显示图片，否则首字母）
+function applyChatHeaderAvatar() {
+  const conv = findConvAnywhere(currentConv);
+  if (!conv) return;
+  if (conv.avatar_url) {
+    $chatAvatar.innerHTML = `<img src="${escHtml(conv.avatar_url)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">`;
+  } else {
+    $chatAvatar.textContent = (conv.name || conv.id)[0];
+  }
+}
+
 async function selectConv(convId, targetMsgId = 0) {
   currentConv = convId;
-  $chatEmpty.style.display = 'none';
-  $messages.style.display = 'flex';
+  // 进入动画：主页看板向上收，聊天区向下展开
+  if ($chatEmpty.style.display !== 'none') transitionChat($chatEmpty, $messages);
+  else $messages.style.display = 'flex';
   $chatHeader.style.display = 'flex';
   $inputArea.style.display = 'flex';
   $msgInput.disabled = false;
@@ -291,7 +405,7 @@ async function selectConv(convId, targetMsgId = 0) {
   const conv = findConvAnywhere(convId);
   if (conv) {
     $chatName.textContent = conv.name || conv.id;
-    $chatAvatar.textContent = (conv.name || conv.id)[0];
+    applyChatHeaderAvatar();
     // 立即清除未读（不等 API）和 @ 标记
     conv.unread_count = 0;
     conv.at = false;
@@ -330,7 +444,7 @@ async function selectConv(convId, targetMsgId = 0) {
     // 手机端：显示聊天区，隐藏侧栏
     if (window.innerWidth <= 768) {
       document.getElementById('chatArea').classList.add('mobile-open');
-      document.querySelector('.sidebar').style.display = 'none';
+      document.querySelectorAll('.sidebar, .side-rail').forEach(el => el.style.display = 'none');
     }
     scrollBottom();
   }
@@ -480,8 +594,6 @@ async function init() {
 
   connectWS();
   await refreshConversations(false);
-  // 首页统计看板
-  loadHomeStats();
   // 获取 Bot 名称
   try {
     const info = await API('/api/system-info');
@@ -489,6 +601,4 @@ async function init() {
     updateAccountBotName();
   } catch (e) {}
 }
-// ⚠️ init() 调用在 settings.js 末尾执行——它依赖 settings.js 中的函数，须等全部文件加载完
-
-init();
+// ⚠️ init() 调用在 settings.js 末尾执行——它依赖 settings.js 中的函数，须等全部文件加载完（这里不能再调用！）

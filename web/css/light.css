@@ -16,6 +16,10 @@ body.light .input-area { background: rgba(232, 233, 237, 0.55); }
 body.light .settings-nav { background: rgba(232, 233, 237, 0.5); }
 body.light .chat-area.has-bg { background: transparent; }
 body.light .sidebar { background: rgba(232, 233, 237, 0.5); }
+body.light .side-rail { background: rgba(0,0,0,0.06); }
+body.light .search-box { background: rgba(0,0,0,0.06); }
+body.light .rail-btn:hover { background: rgba(0,0,0,0.08); color: #1a1b1e; }
+body.light .rail-btn.active, body.light .rail-btn.active:hover { background: var(--accent); color: #fff; }
 body.light .admin-badge { background: rgba(40, 70, 180, 0.18); color: #2a48b0; box-shadow: 0 0 5px rgba(40, 70, 180, 0.25); }
 body.light .owner-badge { background: rgba(180, 110, 20, 0.18); color: #a06018; box-shadow: 0 0 5px rgba(180, 110, 20, 0.25); }
 body.light .role-群主 { color: #a06018; }

@@ -204,13 +204,16 @@ async def get_conversations(limit: int = 50, include_hidden: bool = False) -> li
     return await asyncio.to_thread(_do)
 
 
-async def set_conversation_flags(conv_id: str, pinned=None, muted=None, hidden=None) -> None:
-    """更新会话状态字段（置顶 / 免打扰 / 隐藏），只更新传了的值"""
+async def set_conversation_flags(conv_id: str, pinned=None, muted=None, hidden=None, avatar=None) -> None:
+    """更新会话状态字段（置顶 / 免打扰 / 隐藏 / 群头像），只更新传了的值"""
     sets, args = [], []
     for col, val in (("pinned", pinned), ("muted", muted), ("hidden", hidden)):
         if val is not None:
             sets.append(f"{col} = ?")
             args.append(1 if val else 0)
+    if avatar is not None:
+        sets.append("avatar_url = ?")
+        args.append(avatar)
     if not sets:
         return
     args.append(conv_id)
@@ -346,22 +349,55 @@ async def get_all_messages(conv_id: str) -> list[dict]:
 
 
 async def get_stats() -> dict:
-    """会话数据统计：今日收发消息数、近 7 天活跃群 TOP5、总消息数"""
+    """会话数据统计：今日收发、活跃群 TOP5、近7天趋势/小时分布/媒体分布/引用、会话参与度"""
     def _do():
         conn = get_db()
+        WEEK = "timestamp >= datetime('now', 'localtime', '-6 days')"
         today = conn.execute("""
             SELECT direction, COUNT(*) AS cnt FROM messages
             WHERE date(timestamp) = date('now', 'localtime')
             GROUP BY direction
         """).fetchall()
-        top = conn.execute("""
+        top = conn.execute(f"""
             SELECT c.name AS name, c.id AS conv_id, COUNT(*) AS cnt FROM messages m
             LEFT JOIN conversations c ON c.id = m.conversation_id
-            WHERE m.timestamp >= datetime('now', 'localtime', '-7 days')
+            WHERE m.{WEEK}
             GROUP BY m.conversation_id
             ORDER BY cnt DESC LIMIT 5
         """).fetchall()
         total = conn.execute("SELECT COUNT(*) AS cnt FROM messages").fetchone()["cnt"]
+        # 近 7 天每日趋势
+        trend = conn.execute(f"""
+            SELECT date(timestamp) AS d, COUNT(*) AS cnt FROM messages
+            WHERE {WEEK}
+            GROUP BY d ORDER BY d
+        """).fetchall()
+        # 近 7 天 24 小时分布
+        hourly = conn.execute(f"""
+            SELECT CAST(strftime('%H', timestamp) AS INTEGER) AS h, COUNT(*) AS cnt FROM messages
+            WHERE {WEEK}
+            GROUP BY h
+        """).fetchall()
+        # 近 7 天媒体分布（attachments JSON 文本匹配）
+        media = {}
+        for key, pat in (
+            ("image", '%"content_type": "image/%'),
+            ("video", '%"content_type": "video/%'),
+            ("voice", '%"content_type": "voice"%'),
+            ("file",  '%"content_type": "file"%'),
+        ):
+            media[key] = conn.execute(
+                f"SELECT COUNT(*) AS cnt FROM messages WHERE {WEEK} AND attachments LIKE ?", (pat,)
+            ).fetchone()["cnt"]
+        # 近 7 天引用回复数
+        quoted = conn.execute(
+            f"SELECT COUNT(*) AS cnt FROM messages WHERE {WEEK} AND quoted_ref_idx != ''"
+        ).fetchone()["cnt"]
+        # 会话参与度
+        total_convs = conn.execute("SELECT COUNT(*) AS cnt FROM conversations").fetchone()["cnt"]
+        active_convs = conn.execute(
+            f"SELECT COUNT(DISTINCT conversation_id) AS cnt FROM messages WHERE {WEEK}"
+        ).fetchone()["cnt"]
         conn.close()
         stats = {"incoming": 0, "outgoing": 0}
         for r in today:
@@ -373,6 +409,11 @@ async def get_stats() -> dict:
                 {"name": r["name"] or r["conv_id"], "conv_id": r["conv_id"], "count": r["cnt"]}
                 for r in top
             ],
+            "trend": [{"d": r["d"], "count": r["cnt"]} for r in trend],
+            "hourly": {r["h"]: r["cnt"] for r in hourly},
+            "media": media,
+            "quoted": quoted,
+            "convs": {"total": total_convs, "active": active_convs},
         }
     return await asyncio.to_thread(_do)
 

@@ -15,6 +15,87 @@ function fmtDateDivider(ts) {
   return `${parseInt(m)}月${parseInt(day)}日 ${wd}`;
 }
 
+// ── 消息右键绑定：只在气泡/媒体内容区触发 ─────────
+// （空白区交给聊天区的「清屏」菜单，避免整行隐形右键区）
+function bindMsgContextMenu(el) {
+  el.addEventListener('contextmenu', (e) => {
+    const contentEl = e.target.closest ? e.target.closest('.msg-bubble, .img-placeholder, .msg-audio, .file-card') : null;
+    if (!contentEl) return;
+    onMsgContextMenu.call(el, e);
+  });
+}
+
+// ── 内容渲染（Markdown / 纯文本 + 可选链接卡片）────
+// 链接卡片开关在 设置 → 账号与安全（默认开启；关闭可提高安全性避免 IP 泄露）
+function renderContentHtml(content, msgType) {
+  if (msgType == 2) return renderMarkdown(content);
+  const html = escHtmlWithBr(content);
+  if (localStorage.getItem('link_cards') === '0') return html;
+  return html.replace(/(https?:\/\/[^\s<]+)/g, (url) => {
+    try { new URL(url); } catch (e) { return url; }
+    const shortUrl = url.length > 70 ? url.slice(0, 70) + '…' : url;
+    // 卡片上方独立一行显示原链接文字（带下划线）
+    return `<a class="lc-ext" href="${url}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escHtml(shortUrl)}</a><a class="link-card" href="${url}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" data-url="${url}">
+      <div class="lc-body">
+        <div class="lc-title">正在解析…</div>
+      </div>
+    </a>`;
+  });
+}
+
+// 异步预加载链接卡片：抓取网页标题/描述/图标填充
+function preloadLinkCards() {
+  document.querySelectorAll('.link-card:not([data-preview])').forEach(el => {
+    el.dataset.preview = 'loading';
+    const url = el.dataset.url || '';
+    if (!url) return;
+    API(`/api/link-preview?url=${encodeURIComponent(url)}`).then(r => {
+      if (!r || !r.ok || !r.title) { el.dataset.preview = 'done'; return; }  // 失败保留原链接文字
+      el.innerHTML = `
+        <div class="lc-body">
+          <div class="lc-title">${escHtml(r.title)}</div>
+          ${r.description ? `<div class="lc-desc">${escHtml(r.description)}</div>` : ''}
+        </div>
+        ${r.icon && r.icon.startsWith('http') ? `<img class="lc-icon" src="${escHtml(r.icon)}" onerror="this.remove()" alt="">` : ''}`;
+      el.classList.add('loaded');
+      el.dataset.preview = 'done';
+    }).catch(() => { el.dataset.preview = 'done'; });
+  });
+}
+
+// ── 卡片消息（msg_type=8）渲染 ─────────────────────
+function parseCardMessage(content) {
+  if (!content || typeof content !== 'string') return null;
+  try {
+    const obj = JSON.parse(content);
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) return obj;
+  } catch (e) {}
+  return null;
+}
+
+// 标题/描述/图片 + 末尾分割线 + 下划线链接
+function renderCardMessageHtml(content) {
+  const card = parseCardMessage(content);
+  if (!card) return '';
+  // 兼容两种结构：扁平 {title,desc,pic_url,url} 或 tuwen {"type":"tuwen","content":{...}}
+  const data = (card.content && typeof card.content === 'object' && !Array.isArray(card.content)) ? card.content : card;
+  const title = data.title || data.desc || data.description || '卡片消息';
+  const desc = data.desc || data.description || '';
+  const pic = data.pic_url || data.picture || '';
+  const url = data.url || '';
+  return `
+    <div class="card-msg">
+      <div class="card-msg-main">
+        <div class="card-msg-text">
+          <div class="card-msg-title">${escHtml(title)}</div>
+          ${desc ? `<div class="card-msg-desc">${escHtmlWithBr(desc)}</div>` : ''}
+        </div>
+        ${pic ? `<img class="card-msg-pic" src="${escHtml(pic)}" onerror="this.remove()" alt="">` : ''}
+      </div>
+      ${url ? `<div class="card-msg-sep"></div><a class="card-msg-link" href="${escHtml(url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escHtml(url.length > 70 ? url.slice(0, 70) + '…' : url)}</a>` : ''}
+    </div>`;
+}
+
 // ── 群聊的聊天记录（合并转发）─────────────────────
 let chatRecordCache = [];
 
@@ -45,11 +126,12 @@ function renderChatRecordCard(msgs) {
     </div>`;
 }
 
-// 展开全部：气泡形式（无头像，统一左侧灰色）
+// 展开全部：气泡形式（无头像，统一左侧灰色，显示发送者昵称）
 function openChatRecord() {
   if (!chatRecordCache.length) return;
   $('#chatRecordList').innerHTML = chatRecordCache.map(m =>
     `<div class="cr-bubble-row in">
+      <div class="cr-sender-name">${fmtBotMarker(escHtml(m.sender))}</div>
       <div class="cr-bubble in">${escHtmlWithBr(m.content)}</div>
     </div>`
   ).join('');
@@ -109,7 +191,7 @@ function appendMessage(msg, scroll) {
   div.dataset.msgType = msg.msg_type || 0;
   div.dataset.msgRefIdx = msg.ref_idx || '';
   div.dataset.msgQuotedRefIdx = msg.quoted_ref_idx || '';
-  div.addEventListener('contextmenu', onMsgContextMenu);
+  bindMsgContextMenu(div);
 
   // 解析附件
   let attachHtml = '';
@@ -135,7 +217,7 @@ function appendMessage(msg, scroll) {
           }
           const sizeStyle = hasSize ? `width:${w}px;height:${h}px;` : `max-width:${maxW}px;max-height:${maxH}px;`;
           const placeStyle = hasSize ? `width:${w}px;height:${h}px;` : '';
-          attachHtml += `<div class="img-placeholder" style="${placeStyle}"><img src="${escHtml(mediaUrl)}" class="msg-image${isSticker ? ' sticker-img' : ''}" alt="${escHtml(a.filename || '图片')}" loading="lazy" onclick="viewMedia(event)" onerror="this.closest('.img-placeholder').outerHTML='<div class=\\'media-expired\\'>图片已过期</div>';" onload="this.style.opacity='1'" style="${sizeStyle}opacity:0;"></div>`;
+          attachHtml += `<div class="img-placeholder" style="${placeStyle}"><img src="${escHtml(mediaUrl)}" class="msg-image${isSticker ? ' sticker-img' : ''}" alt="${escHtml(a.filename || '图片')}" onclick="viewMedia(event)" onerror="this.closest('.img-placeholder').outerHTML='<div class=\\'media-expired\\'>图片已过期</div>';" onload="this.style.opacity='1'" style="${sizeStyle}opacity:0;"></div>`;
         } else if (a.content_type && a.content_type.startsWith('video/')) {
           const maxVW = 280, maxVH = 280;
           let vw, vh, hasSize = a.width && a.height;
@@ -179,7 +261,7 @@ function appendMessage(msg, scroll) {
   const isPlaceholder = !attachHtml && placeholders.includes(msg.content);
   // 纯媒体消息（图片/视频/语音，无文本无引用）不垫气泡底
   const mediaOnly = attachHtml && !msg.quoted_content && (
-    !msg.content || ['[图片]', '[视频]', '[语音]'].includes(msg.content)
+    !msg.content || ['[图片]', '[视频]', '[语音]', '[富媒体文件]'].includes(msg.content)
   );
   // 群聊的聊天记录（合并转发）→ 卡片
   const chatRecord = parseChatRecord(msg.content);
@@ -193,7 +275,7 @@ function appendMessage(msg, scroll) {
       <div class="msg-bubble${mediaOnly ? ' media-only' : ''}">
         ${attachHtml}
         ${msg.quoted_content ? `<div class="quote-box" onclick="scrollToQuoted('${msg.quoted_ref_idx || ''}')" title="点击跳转到原消息"><div class="quote-sender"><span>${fmtBotMarker(escHtml(msg.quoted_sender || '未知用户'))}</span><img src="icons/up.svg" class="svg-icon" style="width:12px;height:12px;margin-left:4px;opacity:0.5;" alt=""></div><div class="quote-content">${fmtQuoteContent(msg.quoted_content, msg.quote_thumbs)}</div></div>` : ''}
-        ${chatRecordHtml || (msg.content && !placeholders.includes(msg.content) && !msg.content.startsWith('[文件]') ? `<div class="${isPlaceholder ? 'media-placeholder' : ''}">${(msg.msg_type == 2) ? renderMarkdown(msg.content) : escHtmlWithBr(msg.content)}</div>` : (isPlaceholder ? `<div class="media-placeholder">${escHtmlWithBr(msg.content)}</div>` : ''))}
+        ${chatRecordHtml || (msg.msg_type == 8 ? (renderCardMessageHtml(msg.content) || `<div class="media-placeholder">${escHtmlWithBr(msg.content)}</div>`) : (msg.content && !placeholders.includes(msg.content) && !msg.content.startsWith('[文件]') ? `<div class="${isPlaceholder ? 'media-placeholder' : ''}">${renderContentHtml(msg.content, msg.msg_type)}</div>` : (isPlaceholder ? `<div class="media-placeholder">${escHtmlWithBr(msg.content)}</div>` : '')))}
       </div>
     </div>
   `;
@@ -205,6 +287,7 @@ function appendMessage(msg, scroll) {
   div.querySelector('.msg-bubble').appendChild(timeExt);
 
   $messages.appendChild(div);
+  preloadLinkCards();  // 触发新消息中的链接卡片预加载
   if (scroll) scrollBottom();
 }
 
@@ -297,7 +380,7 @@ function appendPendingMessage(msg) {
       ${msgMetaHtml('outgoing', msg.sender_name, '')}
       <div class="msg-bubble">
         ${msg.quoted_content ? `<div class="quote-box" onclick="scrollToQuoted('${msg.quoted_ref_idx || ''}')" title="点击跳转到原消息"><div class="quote-sender"><span>${fmtBotMarker(escHtml(msg.quoted_sender || '未知用户'))}</span><img src="icons/up.svg" class="svg-icon" style="width:12px;height:12px;margin-left:4px;opacity:0.5;" alt=""></div><div class="quote-content">${fmtQuoteContent(msg.quoted_content, msg.quote_thumbs)}</div></div>` : ''}
-        <div>${(msg.msg_type == 2) ? renderMarkdown(msg.content) : escHtmlWithBr(msg.content)}</div>
+        <div>${msg.msg_type == 8 ? (renderCardMessageHtml(msg.content) || escHtmlWithBr(msg.content)) : renderContentHtml(msg.content, msg.msg_type)}</div>
       </div>
       <button class="msg-retry" onclick="sendMessage('${msg.pending_id}')" title="重发">!</button>
     </div>
@@ -308,8 +391,9 @@ function appendPendingMessage(msg) {
   timeExt.textContent = '发送中…';
   div.querySelector('.msg-bubble').appendChild(timeExt);
 
-  div.addEventListener('contextmenu', onMsgContextMenu);
+  bindMsgContextMenu(div);
   $messages.appendChild(div);
+  preloadLinkCards();  // 发送中的消息也预加载链接卡片
   scrollBottom();
 }
 
@@ -337,10 +421,11 @@ function replacePendingMessage(pendingId, realMsg) {
       ${msgMetaHtml('outgoing', realMsg.sender_name, realMsg.member_role)}
       <div class="msg-bubble">
         ${realMsg.quoted_content ? `<div class="quote-box"><div class="quote-sender">${fmtBotMarker(escHtml(realMsg.quoted_sender || '未知用户'))}</div><div class="quote-content">${fmtQuoteContent(realMsg.quoted_content, realMsg.quote_thumbs)}</div></div>` : ''}
-        <div>${(realMsg.msg_type == 2) ? renderMarkdown(realMsg.content) : escHtmlWithBr(realMsg.content)}</div>
+        <div>${realMsg.msg_type == 8 ? (renderCardMessageHtml(realMsg.content) || escHtmlWithBr(realMsg.content)) : renderContentHtml(realMsg.content, realMsg.msg_type)}</div>
       </div>
     </div>
   `;
+  preloadLinkCards();  // 发送成功替换后预加载链接卡片
   let timeExt = el.querySelector('.msg-time-ext');
   if (!timeExt) { timeExt = document.createElement('div'); timeExt.className = 'msg-time-ext'; el.querySelector('.msg-bubble').appendChild(timeExt); }
   timeExt.textContent = fmtTime(realMsg.timestamp);
@@ -434,17 +519,84 @@ async function pickRichMedia(type) {
 
 $('#richFileInput').addEventListener('change', async function() {
   const file = this.files[0];
+  this.value = '';
   if (!file) return;
   if (!currentConv) { showToast('⚠ 请先选择一个群聊'); return; }
+  await sendRichFile(file, richMediaType);
+});
 
-  const mediaType = richMediaType;
+// ── 粘贴 / 拖拽文件发送（需确认）──────────────────
+$msgInput.addEventListener('paste', async (e) => {
+  const files = e.clipboardData && e.clipboardData.files;
+  if (!files || !files.length) return;
+  e.preventDefault();
+  await confirmAndSendFile(files[0]);
+});
+
+async function confirmAndSendFile(file) {
+  if (!currentConv) { showToast('⚠ 请先选择一个群聊'); return; }
+
+  let type = null;
+  let skipFileConfirm = false;  // 音频已选「作为文件」，不再二次确认
+  if (file.type.startsWith('image/')) type = 'image';
+  else if (file.type.startsWith('video/')) type = 'video';
+  else if (file.type.startsWith('audio/')) {
+    // 音频：一次弹窗确认以语音还是文件形式发送
+    const choice = await showConfirm('以「语音」形式发送该音频？', 'audio', false, true, '作为文件');
+    if (choice === true) type = 'voice';
+    else if (choice === 'third') { type = 'file'; skipFileConfirm = true; }
+    else return;
+  } else {
+    type = 'file';
+  }
+
+  // 确认弹窗：图片/视频预览 + 文件大小提示
+  const previewUrl = URL.createObjectURL(file);
+  const sizeHint = `（文件大小：${formatFileSize(file.size)}）`;
+  const previewType = (type === 'image' || type === 'video') ? type : '';
+  let confirmed;
+  if (type === 'file' && !skipFileConfirm) {
+    confirmed = await showConfirm(`当前 QQ API 不稳定，文件发送几乎 100% 失败，你确认要继续发送吗？${sizeHint}`, 'query', false, true, '', previewUrl, previewType);
+  } else {
+    const nameMap = { image: '图片', video: '视频', voice: '语音' };
+    confirmed = await showConfirm(`以「${nameMap[type]}」形式发送粘贴的文件？${sizeHint}`, type, false, true, type === 'voice' ? '作为文件' : '', previewUrl, previewType);
+  }
+  URL.revokeObjectURL(previewUrl);
+  if (!confirmed) return;
+  await sendRichFile(file, type);
+}
+
+// ── 拖拽文件到聊天区发送 ───────────────────────────
+let dragDepth = 0;
+$messages.addEventListener('dragover', (e) => { e.preventDefault(); });
+$messages.addEventListener('dragenter', (e) => {
+  e.preventDefault();
+  dragDepth++;
+  $('#dropOverlay').style.display = 'flex';
+});
+$messages.addEventListener('dragleave', () => {
+  dragDepth--;
+  if (dragDepth <= 0) { dragDepth = 0; $('#dropOverlay').style.display = 'none'; }
+});
+$messages.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dragDepth = 0;
+  $('#dropOverlay').style.display = 'none';
+  const files = e.dataTransfer && e.dataTransfer.files;
+  if (!files || !files.length) return;
+  confirmAndSendFile(files[0]);
+});
+
+// 发送富媒体文件（文件选择器 / Ctrl+V 粘贴共用）
+async function sendRichFile(file, mediaType) {
+  if (!currentConv) { showToast('⚠ 请先选择一个群聊'); return; }
+
   const fileSizeMB = file.size / (1024 * 1024);
   const softLimits = { image: 20, video: 30, voice: 200, file: 200 };
   const hardLimit = 200;
 
   // 硬限制检查
   if (fileSizeMB > hardLimit) {
-    this.value = '';
     showConfirm('当前媒体大小已超过硬限制（200MB），无法发送', 'error', false, false);
     return;
   }
@@ -453,14 +605,10 @@ $('#richFileInput').addEventListener('change', async function() {
   const softLimit = softLimits[mediaType] || 200;
   if (fileSizeMB > softLimit) {
     const typeName = { image: '图片', video: '视频', voice: '语音', file: '文件' }[mediaType] || '媒体';
-    if (!(await showConfirm(`当前${typeName}大小已超过软限制（${softLimit}MB），继续发送将转为文件发送（当前 QQ API 不稳定，文件发送几乎 100% 失败，你确认要继续发送吗？）`, 'query', false))) {
-      this.value = '';
-      return;
-    }
+    if (!(await showConfirm(`当前${typeName}大小已超过软限制（${softLimit}MB），继续发送将转为文件发送（当前 QQ API 不稳定，文件发送几乎 100% 失败，你确认要继续发送吗？）`, 'query', false))) return;
   }
   const placeholderMap = {image:'[图片]', video:'[视频]', voice:'[语音]', file:'[文件]'};
   const placeholder = placeholderMap[mediaType] || '[图片]';
-  this.value = '';
   pendingContents.add(placeholder);
   const tempId = `rich_${++pendingId}`;
   const blobUrl = URL.createObjectURL(file);
@@ -484,7 +632,7 @@ $('#richFileInput').addEventListener('change', async function() {
       <button class="msg-retry" onclick="retryRichSend('${tempId}')" title="重发" style="display:none;">!</button>
     </div>
   `;
-  pendingDiv.addEventListener('contextmenu', onMsgContextMenu);
+  bindMsgContextMenu(pendingDiv);
   $messages.appendChild(pendingDiv);
   scrollBottom();
 
@@ -553,5 +701,5 @@ $('#richFileInput').addEventListener('change', async function() {
     pendingDiv.classList.add('failed');
     pendingDiv.querySelector('.msg-retry').style.display = '';
   }
-});
+}
 

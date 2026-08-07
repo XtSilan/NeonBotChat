@@ -199,8 +199,14 @@ function scrollBottom() {
         img.addEventListener('error', onDone, { once: true });
       }
     });
-    // 兜底：300ms 后再滚一次
-    setTimeout(() => { $messages.scrollTop = $messages.scrollHeight; }, 300);
+    // 兜底：多次滚动（图片加载/布局变化后仍能到底）
+    [300, 800, 1500].forEach(ms => {
+      setTimeout(() => { $messages.scrollTop = $messages.scrollHeight; }, ms);
+    });
+  } else {
+    [300, 800].forEach(ms => {
+      setTimeout(() => { $messages.scrollTop = $messages.scrollHeight; }, ms);
+    });
   }
 }
 

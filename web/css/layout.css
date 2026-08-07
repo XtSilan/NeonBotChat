@@ -1,3 +1,29 @@
+/* ── Side Rail（窄图标栏）──────────────────────── */
+.side-rail {
+  width: 56px; flex-shrink: 0;
+  position: relative; z-index: 5;  /* 盖在滑出动画中的主侧栏之上 */
+  background: color-mix(in srgb, var(--sidebar) 80%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  border-right: 1px solid rgba(255,255,255,0.1);
+  padding: 12px 0;
+}
+.rail-status {
+  font-size: 0.68em; padding: 2px 8px; border-radius: 10px;
+  background: var(--online); color: #fff; font-weight: 700;
+  margin-top: 18px; white-space: nowrap;
+}
+.rail-status.offline { background: var(--danger); }
+.rail-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: none; background: transparent; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-dim); transition: all 0.15s;
+}
+.rail-btn:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+.rail-btn.active, .rail-btn.active:hover { background: var(--accent); color: #fff; }
+
 /* ── Sidebar ──────────────────────────────────── */
 .sidebar {
   width: 300px; min-width: 240px;
@@ -26,10 +52,11 @@
 }
 .sidebar-header .btn-add:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 .search-box {
-  padding: 10px 16px;
+  padding: 10px 16px; display: flex; align-items: center; gap: 8px;
+  background: rgba(0,0,0,0.25);
 }
 .search-box input {
-  width: 100%; padding: 8px 12px; border-radius: var(--radius);
+  flex: 1; min-width: 0; padding: 8px 12px; border-radius: var(--radius);
   border: 1px solid var(--border); background: var(--bg); color: var(--text);
   outline: none; font-size: 0.9em;
 }
