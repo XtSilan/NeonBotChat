@@ -167,7 +167,6 @@ NeonBotChat/
 ├── PatchUserInfo.py     # 补丁：获取用户昵称 / 头像
 ├── config.example.yaml  # 配置文件示例
 ├── config.yaml          # 实际配置（含密钥，不提交 Git）
-├── .gitignore           # Git 忽略规则
 ├── README.md            # 项目文档
 ├── templates/
 │   └── index.html       # WebUI 前端（零框架依赖）
@@ -255,4 +254,4 @@ NeonBotChat/
 
 ## 📄 License
 
-Copyright © 2026 Neon. All Rights Reserved.
+Copyright © 2026 Neon. All Rights Reserved. [用户协议](AGREEMENT.md)
