@@ -432,7 +432,7 @@ function hideRenameModal() {
 $('#btnSettings').addEventListener('click', showRenameModal);
 $('#mobileBackBtn').addEventListener('click', () => {
   document.getElementById('chatArea').classList.remove('mobile-open');
-  document.querySelector('.sidebar').style.display = '';
+  document.querySelectorAll('.sidebar, .side-rail').forEach(el => el.style.display = '');
 });
 $('#btnCancelRename').addEventListener('click', hideRenameModal);
 $renameModal.addEventListener('click', (e) => {

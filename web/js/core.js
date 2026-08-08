@@ -347,6 +347,8 @@ function showChatView(skipAnim) {
   viewMode = 'chat';
   currentConv = '';
   renderConvList($searchInput.value);  // 清除会话高亮
+  // 恢复两侧栏（含侧侧栏，手机端进入聊天时可能被隐藏）
+  document.querySelectorAll('.sidebar, .side-rail').forEach(el => el.style.display = '');
   // 主侧栏向右弹出（首次加载直接显示无动画）
   const sb = document.querySelector('.sidebar');
   sb.style.display = '';
