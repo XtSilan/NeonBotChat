@@ -142,6 +142,11 @@ $('#chatRecordModal').addEventListener('click', (e) => {
   if (e.target === $('#chatRecordModal')) $('#chatRecordModal').classList.remove('show');
 });
 
+// 私聊（direct）：不显示发送者昵称与头像列（单聊双方已知）
+function isDirectConv(msgConvType) {
+  return msgConvType === 'direct' || currentConvType === 'direct';
+}
+
 // ── 消息头像列（气泡外）───────────────────────────
 function msgAvatarHtml(direction, senderAvatar, senderName) {
   if (direction === 'outgoing') {
@@ -152,6 +157,14 @@ function msgAvatarHtml(direction, senderAvatar, senderName) {
   }
   if (senderAvatar) {
     return `<div class="msg-avatar-col"><img src="${escHtml(senderAvatar)}" class="msg-avatar-img" onerror="this.style.display='none'" alt="" onclick="event.stopPropagation();viewImage('${escHtml(senderAvatar)}')"></div>`;
+  }
+  // 私聊：用会话头像（单聊即对方头像）
+  if (direction !== 'outgoing' && currentConvType === 'direct') {
+    const conv = findConvAnywhere(currentConv);
+    const convAv = conv && conv.avatar_url;
+    if (convAv) {
+      return `<div class="msg-avatar-col"><img src="${escHtml(convAv)}" class="msg-avatar-img" onerror="this.style.display='none'" alt="" onclick="event.stopPropagation();viewImage('${escHtml(convAv)}')"></div>`;
+    }
   }
   // 无头像：首字符占位
   return `<div class="msg-avatar-col"><span class="msg-avatar-fallback">${escHtml((senderName || '?')[0])}</span></div>`;
@@ -267,14 +280,15 @@ function appendMessage(msg, scroll) {
   const chatRecord = parseChatRecord(msg.content);
   const chatRecordHtml = chatRecord ? renderChatRecordCard(chatRecord) : '';
 
+  const noMeta = isDirectConv(msg.conv_type);  // 私聊不显示昵称（头像保留）
   div.innerHTML = `
     <div class="msg-checkbox"><img src="icons/ok.svg" class="svg-icon" style="width:12px;height:12px;" alt=""></div>
     ${msgAvatarHtml(msg.direction, msg.sender_avatar, msg.sender_name)}
     <div class="msg-body">
-      ${msgMetaHtml(msg.direction, msg.sender_name, msg.member_role)}
+      ${noMeta ? '' : msgMetaHtml(msg.direction, msg.sender_name, msg.member_role)}
       <div class="msg-bubble${mediaOnly ? ' media-only' : ''}">
+        ${msg.quoted_ref_idx ? `<div class="quote-box" onclick="scrollToQuoted('${msg.quoted_ref_idx || ''}')" title="点击跳转到原消息"><div class="quote-sender"><span>${msg.quoted_content ? fmtBotMarker(escHtml(msg.quoted_sender || '未知用户')) : '引用了一条消息'}</span><img src="icons/up.svg" class="svg-icon" style="width:12px;height:12px;margin-left:4px;opacity:0.5;" alt=""></div>${msg.quoted_content ? `<div class="quote-content">${fmtQuoteContent(msg.quoted_content, msg.quote_thumbs)}</div>` : ''}</div>` : ''}
         ${attachHtml}
-        ${msg.quoted_content ? `<div class="quote-box" onclick="scrollToQuoted('${msg.quoted_ref_idx || ''}')" title="点击跳转到原消息"><div class="quote-sender"><span>${fmtBotMarker(escHtml(msg.quoted_sender || '未知用户'))}</span><img src="icons/up.svg" class="svg-icon" style="width:12px;height:12px;margin-left:4px;opacity:0.5;" alt=""></div><div class="quote-content">${fmtQuoteContent(msg.quoted_content, msg.quote_thumbs)}</div></div>` : ''}
         ${chatRecordHtml || (msg.msg_type == 8 ? (renderCardMessageHtml(msg.content) || `<div class="media-placeholder">${escHtmlWithBr(msg.content)}</div>`) : (msg.content && !placeholders.includes(msg.content) && !msg.content.startsWith('[文件]') ? `<div class="${isPlaceholder ? 'media-placeholder' : ''}">${renderContentHtml(msg.content, msg.msg_type)}</div>` : (isPlaceholder ? `<div class="media-placeholder">${escHtmlWithBr(msg.content)}</div>` : '')))}
       </div>
     </div>
@@ -377,12 +391,14 @@ function appendPendingMessage(msg) {
   div.innerHTML = `
     ${msgAvatarHtml('outgoing', '', msg.sender_name)}
     <div class="msg-body">
-      ${msgMetaHtml('outgoing', msg.sender_name, '')}
-      <div class="msg-bubble">
-        ${msg.quoted_content ? `<div class="quote-box" onclick="scrollToQuoted('${msg.quoted_ref_idx || ''}')" title="点击跳转到原消息"><div class="quote-sender"><span>${fmtBotMarker(escHtml(msg.quoted_sender || '未知用户'))}</span><img src="icons/up.svg" class="svg-icon" style="width:12px;height:12px;margin-left:4px;opacity:0.5;" alt=""></div><div class="quote-content">${fmtQuoteContent(msg.quoted_content, msg.quote_thumbs)}</div></div>` : ''}
-        <div>${msg.msg_type == 8 ? (renderCardMessageHtml(msg.content) || escHtmlWithBr(msg.content)) : renderContentHtml(msg.content, msg.msg_type)}</div>
+      ${isDirectConv() ? '' : msgMetaHtml('outgoing', msg.sender_name, '')}
+      <div style="display:flex;align-items:center;gap:8px;flex-direction:row-reverse;">
+        <div class="msg-bubble">
+          ${msg.quoted_content ? `<div class="quote-box" onclick="scrollToQuoted('${msg.quoted_ref_idx || ''}')" title="点击跳转到原消息"><div class="quote-sender"><span>${fmtBotMarker(escHtml(msg.quoted_sender || '未知用户'))}</span><img src="icons/up.svg" class="svg-icon" style="width:12px;height:12px;margin-left:4px;opacity:0.5;" alt=""></div><div class="quote-content">${fmtQuoteContent(msg.quoted_content, msg.quote_thumbs)}</div></div>` : ''}
+          <div>${msg.msg_type == 8 ? (renderCardMessageHtml(msg.content) || escHtmlWithBr(msg.content)) : renderContentHtml(msg.content, msg.msg_type)}</div>
+        </div>
+        <button class="msg-retry" onclick="sendMessage('${msg.pending_id}')" title="重发">!</button>
       </div>
-      <button class="msg-retry" onclick="sendMessage('${msg.pending_id}')" title="重发">!</button>
     </div>
   `;
   const timeExt = document.createElement('div');
@@ -418,7 +434,7 @@ function replacePendingMessage(pendingId, realMsg) {
   el.innerHTML = `
     ${msgAvatarHtml('outgoing', '', realMsg.sender_name)}
     <div class="msg-body">
-      ${msgMetaHtml('outgoing', realMsg.sender_name, realMsg.member_role)}
+      ${isDirectConv() ? '' : msgMetaHtml('outgoing', realMsg.sender_name, realMsg.member_role)}
       <div class="msg-bubble">
         ${realMsg.quoted_content ? `<div class="quote-box"><div class="quote-sender">${fmtBotMarker(escHtml(realMsg.quoted_sender || '未知用户'))}</div><div class="quote-content">${fmtQuoteContent(realMsg.quoted_content, realMsg.quote_thumbs)}</div></div>` : ''}
         <div>${realMsg.msg_type == 8 ? (renderCardMessageHtml(realMsg.content) || escHtmlWithBr(realMsg.content)) : renderContentHtml(realMsg.content, realMsg.msg_type)}</div>
@@ -444,8 +460,9 @@ function markMessageFailed(pendingId) {
   if (!el) return;
   el.classList.remove('pending');
   el.classList.add('failed');
+  // 失败只显示红色感叹号，不显示错误文字
   const timeEl = el.querySelector('.msg-time-ext');
-  if (timeEl) { timeEl.textContent = '发送失败'; timeEl.style.opacity = '1'; }
+  if (timeEl) timeEl.remove();
 }
 
 // ── 事件绑定 ────────────────────────────────────────
@@ -618,18 +635,20 @@ async function sendRichFile(file, mediaType) {
   pendingDiv.innerHTML = `
     ${msgAvatarHtml('outgoing', '', botDisplayName)}
     <div class="msg-body">
-      ${msgMetaHtml('outgoing', botDisplayName, '')}
-      <div class="msg-bubble${mediaType !== 'file' ? ' media-only' : ''}">
-        <div class="img-placeholder" style="cursor:pointer;" title="点击全屏播放" onclick="viewMedia(event)">${mediaType === 'video'
-          ? `<div class="video-play-btn"></div><video src="${blobUrl}" class="msg-video" muted playsinline preload="metadata" style="max-width:280px;max-height:280px;border-radius:8px;opacity:0.7;position:relative;z-index:2;pointer-events:none;" oncontextmenu="event.stopPropagation()"></video>`
-          : mediaType === 'voice'
-          ? `<audio src="${blobUrl}" class="msg-audio" controls preload="auto" style="max-width:280px;opacity:0.7;position:relative;z-index:2;pointer-events:auto;" oncontextmenu="event.stopPropagation()"></audio>`
-          : mediaType === 'file'
-          ? `<div class="file-card" style="opacity:0.7;"><span class="file-icon"><img src="icons/${fileIconName(file.name)}.svg" class="svg-icon" style="width:20px;height:20px;" alt=""></span><div class="file-info"><div class="file-name">${escHtml(file.name)}</div><div class="file-size">${formatFileSize(file.size)}</div></div></div>`
-          : `<img src="${blobUrl}" class="msg-image" style="max-width:280px;max-height:280px;object-fit:cover;border-radius:8px;opacity:0.7;cursor:pointer;" onclick="event.stopPropagation();viewMedia(event)">`}</div>
-        <div style="font-size:0.75em;color:var(--text-dim);">上传中…</div>
+      ${isDirectConv() ? '' : msgMetaHtml('outgoing', botDisplayName, '')}
+      <div style="display:flex;align-items:center;gap:8px;flex-direction:row-reverse;">
+        <div class="msg-bubble${mediaType !== 'file' ? ' media-only' : ''}">
+          <div class="img-placeholder" style="cursor:pointer;" title="点击全屏播放" onclick="viewMedia(event)">${mediaType === 'video'
+            ? `<div class="video-play-btn"></div><video src="${blobUrl}" class="msg-video" muted playsinline preload="metadata" style="max-width:280px;max-height:280px;border-radius:8px;opacity:0.7;position:relative;z-index:2;pointer-events:none;" oncontextmenu="event.stopPropagation()"></video>`
+            : mediaType === 'voice'
+            ? `<audio src="${blobUrl}" class="msg-audio" controls preload="auto" style="max-width:280px;opacity:0.7;position:relative;z-index:2;pointer-events:auto;" oncontextmenu="event.stopPropagation()"></audio>`
+            : mediaType === 'file'
+            ? `<div class="file-card" style="opacity:0.7;"><span class="file-icon"><img src="icons/${fileIconName(file.name)}.svg" class="svg-icon" style="width:20px;height:20px;" alt=""></span><div class="file-info"><div class="file-name">${escHtml(file.name)}</div><div class="file-size">${formatFileSize(file.size)}</div></div></div>`
+            : `<img src="${blobUrl}" class="msg-image" style="max-width:280px;max-height:280px;object-fit:cover;border-radius:8px;opacity:0.7;cursor:pointer;" onclick="event.stopPropagation();viewMedia(event)">`}</div>
+          <div style="font-size:0.75em;color:var(--text-dim);">上传中…</div>
+        </div>
+        <button class="msg-retry" onclick="retryRichSend('${tempId}')" title="重发" style="display:none;">!</button>
       </div>
-      <button class="msg-retry" onclick="retryRichSend('${tempId}')" title="重发" style="display:none;">!</button>
     </div>
   `;
   bindMsgContextMenu(pendingDiv);
@@ -645,7 +664,8 @@ async function sendRichFile(file, mediaType) {
       pendingContents.delete(placeholder);
       const previewEl = pendingDiv.querySelector('img, video, audio');
       if (previewEl) previewEl.style.opacity = '1';
-      pendingDiv.querySelector('.msg-bubble > div:last-of-type').textContent = '图床上传失败';
+      const failStatus = pendingDiv.querySelector('.msg-bubble > div:last-of-type');
+      if (failStatus) failStatus.style.display = 'none';  // 失败只显示感叹号
       pendingDiv.classList.add('failed');
       pendingDiv.querySelector('.msg-retry').style.display = '';
       return;
@@ -664,7 +684,8 @@ async function sendRichFile(file, mediaType) {
       pendingContents.delete(placeholder);
       const previewEl2 = pendingDiv.querySelector('img, video, audio');
       if (previewEl2) previewEl2.style.opacity = '1';
-      pendingDiv.querySelector('.msg-bubble > div:last-of-type').textContent = sendR.error || '发送失败';
+      const failStatus2 = pendingDiv.querySelector('.msg-bubble > div:last-of-type');
+      if (failStatus2) failStatus2.style.display = 'none';  // 失败只显示感叹号
       pendingDiv.classList.add('failed');
       pendingDiv.querySelector('.msg-retry').style.display = '';
       return;
@@ -697,7 +718,8 @@ async function sendRichFile(file, mediaType) {
     pendingContents.delete(placeholder);
     const previewEl4 = pendingDiv.querySelector('img, video, audio');
     if (previewEl4) previewEl4.style.opacity = '1';
-    pendingDiv.querySelector('.msg-bubble > div:last-of-type').textContent = '发送失败';
+    const failStatus3 = pendingDiv.querySelector('.msg-bubble > div:last-of-type');
+    if (failStatus3) failStatus3.style.display = 'none';  // 失败只显示感叹号
     pendingDiv.classList.add('failed');
     pendingDiv.querySelector('.msg-retry').style.display = '';
   }

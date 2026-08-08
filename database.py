@@ -256,6 +256,12 @@ async def save_message(
     def _do():
         conn = get_db()
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # 先确保会话存在（否则 messages 外键约束失败）
+        if conn.execute("SELECT COUNT(*) FROM conversations WHERE id = ?", (conversation_id,)).fetchone()[0] == 0:
+            conn.execute("""
+                INSERT INTO conversations (id, name, type)
+                VALUES (?, ?, ?)
+            """, (conversation_id, conversation_id, "group"))
         cur = conn.execute("""
             INSERT INTO messages (conversation_id, sender_openid, sender_name,
                                   sender_avatar, content, msg_type, direction, msg_id, attachments, member_role,
@@ -273,13 +279,6 @@ async def save_message(
                 last_message_time = julianday('now')
             WHERE id = ?
         """, (content[:200], sender_name, direction, conversation_id))
-
-        # 如果会话不存在，自动创建（群聊首次消息）
-        if conn.execute("SELECT COUNT(*) FROM conversations WHERE id = ?", (conversation_id,)).fetchone()[0] == 0:
-            conn.execute("""
-                INSERT INTO conversations (id, name, type)
-                VALUES (?, ?, ?)
-            """, (conversation_id, conversation_id, "group"))
 
         conn.commit()
         row = conn.execute("SELECT * FROM messages WHERE id = ?", (msg_pk,)).fetchone()

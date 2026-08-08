@@ -19,7 +19,7 @@ import logging as std_logging
 import botpy
 from botpy import logging as botpy_logging
 from botpy.ext.cog_yaml import read
-from botpy.message import GroupMessage, Message
+from botpy.message import GroupMessage, Message, C2CMessage
 
 from PatchMsg import (
     _ensure_group_message_create_parser,
@@ -110,6 +110,69 @@ class MyClient(botpy.Client):
         """
         await self._handle_group_message(message, at_received=True)
 
+    async def on_c2c_message_create(self, message: C2CMessage):
+        """收到私聊消息 → 入库 → 推送到 WebUI"""
+        await self._handle_c2c_message(message)
+
+    async def _handle_c2c_message(self, message: C2CMessage) -> None:
+        """统一处理私聊消息"""
+        try:
+            from database import save_message, upsert_conversation, is_echo
+            from web_server import push_bot_message
+
+            # 发送者 user_openid
+            user_id = ""
+            author = getattr(message, "author", None)
+            if author:
+                user_id = getattr(author, "user_openid", "") or ""
+            if not user_id:
+                user_id = getattr(message, "user_openid", "") or ""
+            if not user_id:
+                _log.warning("[C2C] 缺少 user_openid，跳过")
+                return
+
+            content = getattr(message, "content", "") or ""
+            msg_id = getattr(message, "id", "") or ""
+
+            # 去重：Bot 自己发的回显
+            if is_author_bot(msg_id) and is_echo(user_id, content):
+                _log.debug("[C2C去重] 跳过回显: %s", content[:40])
+                return
+
+            # 处理表情标记（与群聊一致）
+            import re as _re
+            content = _re.sub(r'<faceType=1,[^>]*>', '[表情符号]', content)
+            content = _re.sub(r'<faceType=6,[^>]*>', '', content)
+
+            # 附件归一化（botpy 原生 attachments 对象列表）
+            import json as _json
+            norm_attachments = []
+            for a in (getattr(message, "attachments", None) or []):
+                if isinstance(a, dict):
+                    norm_attachments.append(a)
+                elif hasattr(a, "__dict__"):
+                    norm_attachments.append({k: v for k, v in a.__dict__.items() if not k.startswith("_")})
+            attachments_json = _json.dumps(norm_attachments, ensure_ascii=False)
+
+            # 创建/更新私聊会话
+            await upsert_conversation(user_id, name=f"私聊 {user_id[:10]}", conv_type="direct")
+
+            saved = await save_message(
+                conversation_id=user_id,
+                sender_openid=user_id,
+                sender_name=user_id,
+                content=content,
+                direction="incoming",
+                msg_id=msg_id,
+                msg_type=getattr(message, "message_type", 0) or 0,
+                attachments=attachments_json,
+            )
+            saved["conv_type"] = "direct"
+            push_bot_message({"type": "new_message", "data": saved})
+            _log.info("📥 收到私聊 %s 的消息: %s", user_id, content[:50] or "[附件消息]")
+        except Exception as e:
+            _log.warning("[C2C] 处理失败: %s", e, exc_info=True)
+
     async def _handle_group_message(self, message: GroupMessage, at_received: bool = False):
         """统一处理群消息"""
         try:
@@ -137,16 +200,30 @@ class MyClient(botpy.Client):
             raw_attachments = get_raw_attachments(msg_id_for_att)
 
             # 引用回复消息：提取被引用消息的内容
+            # （按 ref_msg_idx 引用标记判断，而非 msg_type==103——QQ 现在引用消息 msg_type 可能是 0）
             quoted_sender = ""
             quoted_content = ""
             quote_thumbs_str = ""
-            msg_type_raw = get_msg_type(msg_id_for_att)
-            if msg_type_raw == 103:
+            if get_ref_msg_idx(msg_id_for_att):
                 elements = get_msg_elements(msg_id_for_att)
                 # 优先通过 ref_msg_idx 反查本地 DB
                 qmsg_content = ""
                 if elements:
-                    qmsg_content = elements[0].get("content", "")
+                    # msg_elements[0] 可能是嵌套结构，递归提取文本字段
+                    def _extract_elem_text(elem):
+                        if isinstance(elem, str):
+                            return elem.strip()
+                        if isinstance(elem, dict):
+                            for k in ("text", "content", "desc", "description", "title", "message", "msg"):
+                                v = elem.get(k)
+                                if isinstance(v, str) and v.strip():
+                                    return v.strip()
+                                if isinstance(v, dict):
+                                    r = _extract_elem_text(v)
+                                    if r:
+                                        return r
+                        return ""
+                    qmsg_content = _extract_elem_text(elements[0])
                 import sqlite3 as _sq, os as _os
                 try:
                     qconn = _sq.connect(_os.path.join(_os.path.dirname(__file__), "neonbot.db"))

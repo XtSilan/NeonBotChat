@@ -5,8 +5,8 @@ let msgSearchConvId = '';  // '' = 全部群；有值 = 限定该群
 function openMsgSearch(convId) {
   msgSearchConvId = convId || '';
   $('#msgSearchInput').value = '';
-  $('#msgSearchInput').placeholder = msgSearchConvId ? '搜索当前群聊…' : '搜索全部群聊…';
-  $('#msgSearchResults').innerHTML = `<div style="padding:20px;color:var(--text-dim);text-align:center;">输入关键词搜索${msgSearchConvId ? '当前群聊' : '全部群聊'}</div>`;
+  $('#msgSearchInput').placeholder = msgSearchConvId ? '搜索当前对话…' : '搜索全部群聊…';
+  $('#msgSearchResults').innerHTML = `<div style="padding:20px;color:var(--text-dim);text-align:center;">输入关键词搜索${msgSearchConvId ? '当前对话' : '全部群聊'}</div>`;
   $('#msgSearchModal').classList.add('show');
   $('#msgSearchInput').focus();
 }
@@ -15,7 +15,7 @@ function openMsgSearch(convId) {
 $('#btnOpenMsgSearch').addEventListener('click', () => openMsgSearch(''));
 // 群聊设置：搜索当前群
 $('#btnOpenConvSearch').addEventListener('click', () => {
-  if (!currentConv) { showToast('⚠ 请先选择一个群聊'); return; }
+  if (!currentConv) { showToast('⚠ 请先选择一个会话'); return; }
   openMsgSearch(currentConv);
 });
 $('#btnCloseMsgSearch').addEventListener('click', () => $('#msgSearchModal').classList.remove('show'));
@@ -52,7 +52,7 @@ $('#msgSearchInput').addEventListener('input', () => {
   clearTimeout(msgSearchTimer);
   const q = $('#msgSearchInput').value.trim();
   if (!q) {
-    $('#msgSearchResults').innerHTML = `<div style="padding:20px;color:var(--text-dim);text-align:center;">输入关键词搜索${msgSearchConvId ? '当前群聊' : '全部群聊'}</div>`;
+    $('#msgSearchResults').innerHTML = `<div style="padding:20px;color:var(--text-dim);text-align:center;">输入关键词搜索${msgSearchConvId ? '当前对话' : '全部群聊'}</div>`;
     return;
   }
   msgSearchTimer = setTimeout(() => {
@@ -137,7 +137,7 @@ $('#homeStats').addEventListener('mousemove', (e) => {
 
 // ── 群聊设置 → 导出聊天记录 ─────────────────────────
 function exportChat(fmt) {
-  if (!currentConv) { showToast('⚠ 请先选择一个群聊'); return; }
+  if (!currentConv) { showToast('⚠ 请先选择一个会话'); return; }
   window.open(`/api/export/${encodeURIComponent(currentConv)}?format=${fmt}`, '_blank');
 }
 $('#btnExportMd').addEventListener('click', () => exportChat('md'));
@@ -175,7 +175,7 @@ $('#customMsgModal').addEventListener('click', (e) => { if (e.target === $('#cus
 $('#btnSendCustom').addEventListener('click', async () => {
   const jsonStr = $('#customMsgJson').value.trim();
   if (!jsonStr) return;
-  if (!currentConv) { showToast('⚠ 请先选择一个群聊'); return; }
+  if (!currentConv) { showToast('⚠ 请先选择一个会话'); return; }
   let payload;
   try { payload = JSON.parse(jsonStr); } catch (e) { showToast('⚠ JSON 格式错误'); return; }
   payload.conv_id = currentConv;
@@ -204,7 +204,7 @@ $('#kbdModal').addEventListener('click', (e) => { if (e.target === $('#kbdModal'
 $('#btnSendKbd').addEventListener('click', async () => {
   const msg = $('#kbdContentInput').value.trim();
   if (!msg) { showToast('⚠ 请输入消息内容'); return; }
-  if (!currentConv) { showToast('⚠ 请先选择一个群聊'); return; }
+  if (!currentConv) { showToast('⚠ 请先选择一个会话'); return; }
 
   const kbdStr = $('#kbdJsonInput').value.trim();
   let kbdObj = null;
@@ -251,7 +251,7 @@ $('#btnCancelCard').addEventListener('click', () => $('#cardModal').classList.re
 $('#cardModal').addEventListener('click', (e) => { if (e.target === $('#cardModal')) $('#cardModal').classList.remove('show'); });
 
 $('#btnSendCard').addEventListener('click', async () => {
-  if (!currentConv) { showToast('⚠ 请先选择一个群聊'); return; }
+  if (!currentConv) { showToast('⚠ 请先选择一个会话'); return; }
 
   let jsonStr;
   if (cardType === 'tuwen') {
@@ -347,6 +347,11 @@ function showRenameModal() {
   const conv = conversations.find(c => c.id === currentConv);
   $renameInput.value = conv ? conv.name : '';
   $('#convOpenIdText').textContent = currentConv;
+  // 私聊文案「个人」化
+  const isDirect = conv && conv.type === 'direct';
+  $renameModal.querySelector('h3').innerHTML = `<img src="icons/settings.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> ${isDirect ? '个人设置' : '群聊设置'}`;
+  $('#convOpenIdLabel').textContent = isDirect ? '用户 OpenID' : '群 OpenID';
+  $('#convAvatarUpload').title = isDirect ? '点击上传个人头像' : '点击上传群头像';
   // 群头像预览 + 群名
   $('#convAvatarName').textContent = conv ? (conv.name || currentConv) : currentConv;
   const av = conv && conv.avatar_url ? conv.avatar_url : '';
@@ -591,8 +596,9 @@ async function refreshStatus() {
   try {
     const info = await API('/api/system-info');
     $sc.innerHTML = `
-      <div style="text-align:center;margin-bottom:12px;">
-        <span style="font-size:1.1em;font-weight:700;"><img src="icons/bot.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> NeonBotChat v26.8.4</span>
+      <div style="text-align:center;margin-bottom:12px;position:relative;">
+        <span style="font-size:1.1em;font-weight:700;"><img src="icons/bot.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> NeonBotChat v26.8.5</span>
+        <button class="glass-btn danger" onclick="restartServer()" style="position:absolute;right:0;top:0;padding:3px 10px;font-size:0.75em;color:var(--danger);"><img src="icons/restart_red.svg" style="width:12px;height:12px;filter:none;" alt=""> 重启服务</button>
       </div>
       <div class="stat-card">
         <div class="stat-label"><img src="icons/system.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 系统</div>
@@ -621,6 +627,24 @@ async function refreshStatus() {
   } catch (e) {
     $sc.innerHTML = '<div style="color:var(--danger);">加载失败</div>';
   }
+}
+
+// ── 重启服务（后端重启后自动刷新页面）───────────────
+async function restartServer() {
+  if (!(await showConfirm('确定重启服务吗？重启后页面将自动刷新', 'warning'))) return;
+  try {
+    await API('/api/restart', { method: 'POST' });
+  } catch (e) { /* 后端可能立即断开，忽略 */ }
+  showToast('⚠ 服务重启中…');
+  let tries = 0;
+  const timer = setInterval(async () => {
+    tries++;
+    if (tries > 40) { clearInterval(timer); showToast('⚠ 重启超时，请手动刷新'); return; }
+    try {
+      const r = await fetch('/api/system-info');
+      if (r.ok) { clearInterval(timer); location.reload(); }
+    } catch (e) { /* 服务未就绪，继续等待 */ }
+  }, 1000);
 }
 
 // ── 会话数据统计 ────────────────────────────────────
@@ -986,6 +1010,94 @@ function showConfirm(msg, iconName = 'warning', danger = true, showCancel = true
   });
 }
 function hideConfirm() { $('#confirmDialog').classList.remove('show'); }
+
+// ── 用户协议（初次访问强制阅读 5s，每浏览器独立）────
+let agreementTimer = null;
+let agreementForced = false;
+
+function showUserAgreement(force) {
+  agreementForced = !!force;
+  $('#agreementModal').classList.add('show');
+  const btn = $('#btnCloseAgreement');
+  clearInterval(agreementTimer);
+  if (force) {
+    btn.disabled = true;
+    let sec = 10;
+    btn.textContent = `我已知晓并同意（${sec}s）`;
+    agreementTimer = setInterval(() => {
+      sec--;
+      if (sec <= 0) {
+        clearInterval(agreementTimer);
+        btn.disabled = false;
+        btn.textContent = '我已知晓并同意';
+      } else {
+        btn.textContent = `我已知晓并同意（${sec}s）`;
+      }
+    }, 1000);
+  } else if (localStorage.getItem('agreement_accepted') === '1') {
+    // 已同意：可点击，点击即关闭该页面
+    btn.disabled = false;
+    btn.textContent = '您已同意该协议';
+  } else {
+    btn.disabled = false;
+    btn.textContent = '我已知晓并同意';
+  }
+}
+
+$('#btnCloseAgreement').addEventListener('click', () => {
+  localStorage.setItem('agreement_accepted', '1');
+  clearInterval(agreementTimer);
+  $('#agreementModal').classList.remove('show');
+});
+
+// 拒绝协议：任何模式都需弹窗确认，确认后删除同意记录并返回上一页
+$('#btnRejectAgreement').addEventListener('click', async () => {
+  clearInterval(agreementTimer);
+  if (!(await showConfirm('若您拒绝将无法使用该软件。确定拒绝吗？', 'warning'))) {
+    // 取消拒绝：强制模式恢复倒计时继续阅读，非强制保持弹窗
+    if (agreementForced) showUserAgreement(true);
+    return;
+  }
+  localStorage.removeItem('agreement_accepted');
+  if (history.length > 1) history.back();
+  else window.close();
+});
+$('#agreementModal').addEventListener('click', (e) => {
+  // 强制模式（初次访问）不允许点遮罩跳过
+  if (e.target === $('#agreementModal') && !agreementForced) $('#agreementModal').classList.remove('show');
+});
+
+// 初次访问：自动弹出协议（每个浏览器 localStorage 独立）
+if (localStorage.getItem('agreement_accepted') !== '1') showUserAgreement(true);
+
+// 加载协议内容（服务端 AGREEMENT.md）
+// 协议专用渲染：按空行分段，标题/正文紧凑，无 <br> 空隙
+function renderAgreement(md) {
+  return md.split(/\n{2,}/).map(seg => {
+    const t = seg.trim();
+    if (!t) return '';
+    if (/^#{1,6}\s/.test(t)) {
+      const level = Math.min(t.match(/^#+/)[0].length, 3);
+      return `<h${level}>${t.replace(/^#+\s*/, '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}</h${level}>`;
+    }
+    return `<p>${t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, ' ')}</p>`;
+  }).join('');
+}
+
+async function loadAgreement() {
+  try {
+    const r = await API('/api/agreement');
+    const el = $('#agreementContent');
+    if (r && r.ok && r.content) {
+      el.innerHTML = renderAgreement(r.content);
+    } else {
+      el.innerHTML = '<p>协议内容加载失败</p>';
+    }
+  } catch (e) {
+    $('#agreementContent').innerHTML = '<p>协议内容加载失败</p>';
+  }
+}
+loadAgreement();
 
 // ── 退出登录 ────────────────────────────────────────
 $('#btnLogout').addEventListener('click', async () => {

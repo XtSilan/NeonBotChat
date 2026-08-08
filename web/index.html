@@ -6,10 +6,10 @@
 <title>NeonBotChat 聊天</title>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css">
-<link rel="stylesheet" href="css/base.css?v=26.8.4">
-<link rel="stylesheet" href="css/layout.css?v=26.8.4">
-<link rel="stylesheet" href="css/components.css?v=26.8.4">
-<link rel="stylesheet" href="css/light.css?v=26.8.4">
+<link rel="stylesheet" href="css/base.css?v=26.8.5">
+<link rel="stylesheet" href="css/layout.css?v=26.8.5">
+<link rel="stylesheet" href="css/components.css?v=26.8.5">
+<link rel="stylesheet" href="css/light.css?v=26.8.5">
 </head>
 <body>
 <div class="chat-bg-layer" id="chatBgLayer"></div>
@@ -75,7 +75,7 @@
     </div>
     <input type="file" id="convAvatarFile" accept="image/*" style="display:none;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;background:rgba(0,0,0,0.12);border-radius:8px;padding:8px 10px;">
-      <span style="font-size:0.8em;color:var(--text-dim);flex-shrink:0;">群 OpenID</span>
+      <span style="font-size:0.8em;color:var(--text-dim);flex-shrink:0;" id="convOpenIdLabel">群 OpenID</span>
       <code id="convOpenIdText" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.78em;color:var(--text);user-select:all;" title="点击可全选"></code>
       <button class="glass-btn" id="btnCopyConvId" style="padding:3px 10px;font-size:0.8em;"><img src="icons/copy.svg" class="svg-icon" style="width:14px;height:14px;" alt=""> 复制</button>
     </div>
@@ -125,6 +125,18 @@
     <div id="chatRecordList" style="max-height:60vh; overflow-y:auto; margin-top:4px;"></div>
     <div class="modal-actions" style="margin-top:12px;">
       <button class="glass-btn" id="btnCloseChatRecord">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 用户协议 Modal ═══════════ -->
+<div class="modal-overlay" id="agreementModal" style="z-index:150;">
+  <div class="modal-box" style="width:520px;max-width:95vw;">
+    <h3><img src="icons/documents.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 用户协议</h3>
+    <div id="agreementContent" style="max-height:55vh;overflow-y:auto;font-size:0.85em;line-height:1.7;color:var(--text);padding-right:6px;">加载中…</div>
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="glass-btn danger" id="btnRejectAgreement" style="color:var(--danger);">拒绝</button>
+      <button class="glass-btn active" id="btnCloseAgreement" disabled>我已知晓并同意（10s）</button>
     </div>
   </div>
 </div>
@@ -217,7 +229,7 @@
         <div style="display:flex; gap:8px; margin-bottom:16px;">
           <button class="theme-btn" id="themeLight" onclick="setTheme('light')"><img src="icons/light_mode.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 浅色</button>
           <button class="theme-btn" id="themeDark" onclick="setTheme('dark')"><img src="icons/dark_mode.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 深色</button>
-          <button class="theme-btn" id="themeAuto" onclick="setTheme('auto')"><img src="icons/system.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 自动</button>
+          <button class="theme-btn" id="themeAuto" onclick="setTheme('auto')"><img src="icons/auto.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 自动</button>
         </div>
         <h3 style="margin-bottom:12px;"><img src="icons/home.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 默认页面</h3>
         <div style="display:flex; gap:8px; margin-bottom:16px;">
@@ -296,10 +308,10 @@
       <div class="settings-tab" id="tab-about" style="display:none; text-align:center;">
         <h3>关于</h3>
         <p style="margin:12px 0;"><img src="icons/bot.svg" class="svg-icon" style="width:48px;height:48px;" alt=""></p>
-        <p style="font-size:1.2em;font-weight:700;margin:8px 0;">NeonBot v26.8.4</p>
-        <p style="font-size:0.85em;color:var(--text-dim);font-style:italic;margin:4px 0;">✨ 基于 QQ Botpy SDK 开发的 WebUI 前端管理面板，支持真人收发群消息。</p>
+        <p style="font-size:1.2em;font-weight:700;margin:8px 0;">NeonBot v26.8.5</p>
+        <p style="font-size:0.85em;color:var(--text-dim);font-style:italic;margin:4px 0;">✨ 基于 QQ Botpy SDK 开发的 WebUI 前端管理面板，支持真人收发群+单聊消息。</p>
         <a href="/api/readme" target="_blank" style="color:var(--accent);font-size:0.9em;display:block;margin-top:16px;"><img src="icons/documents.svg" class="svg-icon" style="width:14px;height:14px;" alt=""> 阅读 README.md</a>
-        <p style="color:var(--text-dim);font-size:0.85em;margin-top:12px;">Copyright © 2026 Neon. All Rights Reserved.</p>
+        <p style="color:var(--text-dim);font-size:0.85em;margin-top:12px;">Copyright © 2026 Neon. All Rights Reserved. <a href="javascript:void(0)" onclick="showUserAgreement()" style="color:var(--accent);">用户协议</a></p>
       </div>
     </div>
   </div>
@@ -429,11 +441,11 @@
 <input type="file" id="richFileInput" accept="image/*" style="display:none;">
 </main>
 
-<script src="js/utils.js?v=26.8.4"></script>
-<script src="js/core.js?v=26.8.4"></script>
-<script src="js/messages.js?v=26.8.4"></script>
-<script src="js/lightbox.js?v=26.8.4"></script>
-<script src="js/contextmenu.js?v=26.8.4"></script>
-<script src="js/settings.js?v=26.8.4"></script>
+<script src="js/utils.js?v=26.8.5"></script>
+<script src="js/core.js?v=26.8.5"></script>
+<script src="js/messages.js?v=26.8.5"></script>
+<script src="js/lightbox.js?v=26.8.5"></script>
+<script src="js/contextmenu.js?v=26.8.5"></script>
+<script src="js/settings.js?v=26.8.5"></script>
 </body>
 </html>

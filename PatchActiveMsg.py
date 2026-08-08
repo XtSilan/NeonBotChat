@@ -120,6 +120,94 @@ async def send_group_msg(
             return result
 
 
+async def send_c2c_msg(
+    user_openid: str,
+    content: str,
+    msg_type: int = 0,
+    message_reference: dict = None,
+    keyboard_content: dict = None,
+    raw_payload: dict = None,
+) -> dict:
+    """主动发送 C2C 私聊消息（POST /v2/users/{user_openid}/messages）"""
+    token = await _get_access_token()
+
+    url = f"{BASE_URL}/v2/users/{user_openid}/messages"
+    headers = {
+        "Authorization": f"{AUTH_TYPE} {token}",
+        "Content-Type": "application/json",
+    }
+    if raw_payload is not None:
+        payload = {"msg_type": msg_type}
+        payload.update(raw_payload)
+    else:
+        payload = {"msg_type": msg_type}
+        if msg_type == 2:  # markdown
+            payload["markdown"] = {"content": content}
+        elif msg_type == 8:  # 图文卡片
+            payload["card"] = json.loads(content) if isinstance(content, str) else content
+        else:
+            payload["content"] = content
+    if message_reference:
+        payload["message_reference"] = message_reference
+    if keyboard_content is not None:
+        payload["keyboard"] = keyboard_content
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, headers=headers, json=payload) as resp:
+            result = await resp.json()
+            if resp.status != 200:
+                _log.error(f"📤 C2C 发送失败 ({resp.status}): {result}")
+            else:
+                _log.info(f"📤 C2C 发送成功:\n{json.dumps(result, ensure_ascii=False, indent=2)}")
+            return result
+
+
+async def upload_c2c_media_by_url(
+    user_openid: str,
+    media_url: str,
+    file_type: str = "image",
+    srv_send_msg: bool = False,
+    file_name: str = "",
+) -> dict:
+    """通过 URL 上传富媒体到 C2C 私聊（POST /v2/users/{user_openid}/files）"""
+    if file_type not in MEDIA_TYPE:
+        raise ValueError(f"file_type 必须是 {list(MEDIA_TYPE.keys())}，收到: {file_type}")
+
+    token = await _get_access_token()
+    url = f"{BASE_URL}/v2/users/{user_openid}/files"
+
+    headers = {
+        "Authorization": f"{AUTH_TYPE} {token}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "file_type": MEDIA_TYPE[file_type],
+        "url": media_url,
+        "srv_send_msg": srv_send_msg,
+    }
+    if file_name:
+        payload["file_name"] = file_name
+
+    _log.info(f"📤 [c2c upload_by_url] 请求体: {json.dumps(payload, ensure_ascii=False)}")
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, headers=headers, json=payload) as resp:
+            text = await resp.text()
+            if resp.status != 200:
+                _log.error(f"📤 C2C URL上传失败 ({resp.status}): {text}")
+                raise RuntimeError(f"C2C URL上传失败: {text}")
+            result = json.loads(text)
+            if srv_send_msg:
+                _log.info(f"📤 C2C 上传并发送成功 file_type={file_type} id={result.get('id', '?')}")
+                return result
+            file_info = result.get("file_info")
+            if not file_info:
+                raise RuntimeError(f"上传成功但未返回 file_info: {result}")
+            _log.info(f"📤 C2C URL上传成功 file_type={file_type} file_info={file_info[:30]}...")
+            return {"file_info": file_info}
+
+
 async def recall_group_msg(
     group_openid: str,
     message_id: str,
@@ -152,6 +240,38 @@ async def recall_group_msg(
                 _log.error(f"📤 撤回失败 ({resp.status}): {result}")
             else:
                 _log.info(f"📤 撤回成功:\n{json.dumps(result, ensure_ascii=False, indent=2)}")
+            return result
+
+
+async def recall_c2c_msg(
+    user_openid: str,
+    message_id: str,
+) -> dict:
+    """
+    撤回 C2C 私聊消息（DELETE /v2/users/{user_openid}/messages/{message_id}）
+
+    Args:
+        user_openid: 用户 OpenID
+        message_id: 消息 ID（QQ 返回的原始 id）
+    """
+    token = await _get_access_token()
+    url = f"{BASE_URL}/v2/users/{user_openid}/messages/{message_id}"
+
+    headers = {
+        "Authorization": f"{AUTH_TYPE} {token}",
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.delete(url, headers=headers) as resp:
+            text = await resp.text()
+            try:
+                result = json.loads(text) if text else {}
+            except json.JSONDecodeError:
+                result = {"raw": text}
+            if resp.status != 200:
+                _log.error(f"📤 C2C 撤回失败 ({resp.status}): {result}")
+            else:
+                _log.info(f"📤 C2C 撤回成功:\n{json.dumps(result, ensure_ascii=False, indent=2)}")
             return result
 
 

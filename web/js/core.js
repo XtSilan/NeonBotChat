@@ -1,5 +1,6 @@
 // ── 状态 ────────────────────────────────────────────
 let currentConv = null;
+let currentConvType = 'group';  // 'group' | 'direct'（私聊）
 let conversations = [];
 let lastMsgId = 0;  // 当前会话最后一条消息 ID，用于增量拉取
 let ws = null;
@@ -74,7 +75,9 @@ function notifyNewMessage(msg) {
   if (!isAt && isCurrent) return;  // 正在看的会话不打扰
   const conv = findConvAnywhere(msg.conversation_id);
   const name = conv ? (conv.name || conv.id) : msg.conversation_id;
-  const body = (msg.sender_name ? msg.sender_name + ': ' : '') + (msg.content || '[图片/语音]');
+  // 私聊不显示发送者 openid 前缀
+  const senderLabel = msg.conv_type === 'direct' ? '' : (msg.sender_name ? msg.sender_name + ': ' : '');
+  const body = senderLabel + (msg.content || '[图片/语音]');
   try {
     const n = new Notification(isAt ? `📣 ${name} @了你` : name, {
       body: body.slice(0, 120),
@@ -125,7 +128,7 @@ function handleIncomingMessage(msg) {
     conversations.unshift({
       id: msg.conversation_id,
       name: msg.conversation_id,
-      type: 'group',
+      type: msg.conv_type === 'direct' ? 'direct' : 'group',
       avatar_url: '',
       last_message: msg.content || '',
       last_sender: msg.sender_name || '',
@@ -153,6 +156,7 @@ function convPreview(c) {
   const m = String(c.last_message).replace(/\s+/g, ' ').trim();
   if (!m) return '';
   if (c.last_direction === 'incoming' && c.last_sender) {
+    if (c.type === 'direct') return m;  // 私聊不显示发送者 openid
     return c.last_sender + ': ' + m;
   }
   return m;
@@ -392,6 +396,8 @@ function applyChatHeaderAvatar() {
 
 async function selectConv(convId, targetMsgId = 0) {
   currentConv = convId;
+  const convNow = findConvAnywhere(convId);
+  currentConvType = convNow && convNow.type ? convNow.type : 'group';
   // 进入动画：主页看板向上收，聊天区向下展开
   if ($chatEmpty.style.display !== 'none') transitionChat($chatEmpty, $messages);
   else $messages.style.display = 'flex';

@@ -16,7 +16,7 @@ import aiohttp
 from urllib.parse import unquote
 
 from database import (
-    init_db, get_conversations, get_messages, get_recent_messages,
+    init_db, get_conversations, get_conversation, get_messages, get_recent_messages,
     save_message, upsert_conversation, reset_unread,
 )
 from PatchActiveMsg import send_group_msg, recall_group_msg
@@ -152,6 +152,30 @@ def push_bot_message(data: dict) -> None:
     message_queue.put(data)
 
 
+# ── 按会话类型分流：direct → C2C 私聊，否则群聊 ──────────
+
+async def _send_by_type(conv_id, content, msg_type=0, message_reference=None, keyboard_content=None, raw_payload=None):
+    from database import get_conversation
+    from PatchActiveMsg import send_c2c_msg
+    conv = await get_conversation(conv_id)
+    if conv and conv.get("type") == "direct":
+        return await send_c2c_msg(conv_id, content, msg_type=msg_type,
+                                  message_reference=message_reference, keyboard_content=keyboard_content, raw_payload=raw_payload)
+    return await send_group_msg(conv_id, content, msg_type=msg_type,
+                                message_reference=message_reference, keyboard_content=keyboard_content, raw_payload=raw_payload)
+
+
+async def _upload_by_type(conv_id, file_url, file_type="image", srv_send_msg=False, file_name=""):
+    from database import get_conversation
+    from PatchActiveMsg import upload_c2c_media_by_url, upload_group_media_by_url
+    conv = await get_conversation(conv_id)
+    if conv and conv.get("type") == "direct":
+        return await upload_c2c_media_by_url(conv_id, file_url, file_type=file_type,
+                                             srv_send_msg=srv_send_msg, file_name=file_name)
+    return await upload_group_media_by_url(conv_id, file_url, file_type=file_type,
+                                           srv_send_msg=srv_send_msg, file_name=file_name)
+
+
 # ── API 路由 ────────────────────────────────────────────
 
 @app.post("/api/logout")
@@ -282,10 +306,16 @@ async def api_send_media(request: Request):
     _log = _blog.get_logger("NeonBotChat")
     _log.info(f"📤 [send-media] 图床链接: {file_url}  → 群: {conv_id}")
 
-    # 通过 URL 上传，srv_send_msg=True 自动发送（无需二次调用）
+    # 分步发送：1) 上传拿 file_info  2) 发送富媒体消息（获取消息 id / ref_idx 入库）
     try:
-        from PatchActiveMsg import upload_group_media_by_url
-        result = await upload_group_media_by_url(conv_id, file_url, file_type=file_type, srv_send_msg=True, file_name=file_name)
+        up_result = await _upload_by_type(conv_id, file_url, file_type=file_type, srv_send_msg=False, file_name=file_name)
+        file_info = up_result.get("file_info", "") if isinstance(up_result, dict) else ""
+        if not file_info:
+            return JSONResponse({"error": "上传失败：未返回 file_info"}, status_code=400)
+        from PatchActiveMsg import MEDIA_TYPE
+        result = await _send_by_type(conv_id, "", msg_type=7, raw_payload={
+            "media": {"file_info": file_info, "file_type": MEDIA_TYPE.get(file_type, 1)},
+        })
         # 检查 QQ API 是否返回了错误
         if result.get("code") or result.get("err_code"):
             err_msg = result.get("message", "") or result.get("msg", "") or "未知错误"
@@ -311,11 +341,12 @@ async def api_send_media(request: Request):
             attachments=attachments,
             ref_idx=ref_idx,
         )
+        saved["conv_type"] = (await get_conversation(conv_id) or {}).get("type", "group")
         await manager.broadcast({"type": "new_message", "data": saved})
         return {"ok": True, "message": saved, "qq_result": result}
     except Exception as e:
-        return JSONResponse({"error": f"发送失败: {str(e)}"}, status_code=500)
-    except Exception as e:
+        import traceback as _tb
+        _log.error(f"📤 [send-media] 发送失败: {e}\n{_tb.format_exc()}")
         return JSONResponse({"error": f"发送失败: {str(e)}"}, status_code=500)
 
 
@@ -448,6 +479,40 @@ async def api_export(conv_id: str, format: str = "md"):
         media_type=media_type,
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"},
     )
+
+
+@app.get("/api/agreement")
+async def api_agreement():
+    """返回用户协议内容（AGREEMENT.md）"""
+    agreement_path = os.path.join(os.path.dirname(__file__), "AGREEMENT.md")
+    if os.path.isfile(agreement_path):
+        with open(agreement_path, "r", encoding="utf-8") as f:
+            return {"ok": True, "content": f.read()}
+    return {"ok": False, "content": ""}
+
+
+@app.post("/api/restart")
+async def api_restart():
+    """重启后端服务：延迟拉起新进程后退出当前进程"""
+    import subprocess, sys, threading, time, tempfile
+    root = os.path.dirname(__file__)
+    cmd = [sys.executable, os.path.join(root, "init.py")]
+    helper = os.path.join(tempfile.gettempdir(), "nb_restart_helper.py")
+    try:
+        with open(helper, "w", encoding="utf-8") as f:
+            f.write("import time, subprocess, sys\n")
+            f.write("time.sleep(2)\n")
+            f.write(f"subprocess.Popen({cmd!r}, cwd={root!r})\n")
+        flags = 0
+        if sys.platform == "win32":
+            flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+        subprocess.Popen([sys.executable, helper], cwd=root,
+                         creationflags=flags,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:
+        return JSONResponse({"error": f"重启失败: {e}"}, status_code=500)
+    threading.Thread(target=lambda: (time.sleep(1.2), os._exit(0)), daemon=True).start()
+    return {"ok": True}
 
 
 @app.get("/api/stats")
@@ -657,9 +722,8 @@ async def api_send_raw(request: Request):
     if not conv_id:
         return JSONResponse({"error": "conv_id 不能为空"}, status_code=400)
 
-    from PatchActiveMsg import send_group_msg
     msg_type = body.get("msg_type", 0)
-    result = await send_group_msg(conv_id, "", msg_type=msg_type, raw_payload=body)
+    result = await _send_by_type(conv_id, "", msg_type=msg_type, raw_payload=body)
 
     if result.get("code") or result.get("err_code"):
         err_msg = result.get("message", "") or "未知错误"
@@ -673,6 +737,7 @@ async def api_send_raw(request: Request):
         msg_id=str(result.get("id", "")),
         msg_type=msg_type,
     )
+    saved["conv_type"] = (await get_conversation(conv_id) or {}).get("type", "group")
     await manager.broadcast({"type": "new_message", "data": saved})
     return {"ok": True, "message": saved, "qq_result": result}
 
@@ -707,7 +772,7 @@ async def api_send(request: Request):
 
     # 2) 调用 QQ API 发送
     try:
-        result = await send_group_msg(conv_id, content, msg_type=msg_type, message_reference=message_reference, keyboard_content=keyboard_content)
+        result = await _send_by_type(conv_id, content, msg_type=msg_type, message_reference=message_reference, keyboard_content=keyboard_content)
         # 检查 QQ API 是否返回了错误
         if result.get("code") or result.get("err_code") or result.get("error"):
             err_msg = result.get("message", "") or result.get("msg", "") or result.get("error", "") or "未知错误"
@@ -744,7 +809,7 @@ async def api_send(request: Request):
                             if url and (ct.startswith("image/") or ct.startswith("video/")):
                                 thumbs.append({"url": url, "type": "image" if ct.startswith("image/") else "video"})
                         if thumbs:
-                            quoted_content = quoted_content or ""
+                            quote_thumbs = _j.dumps(thumbs, ensure_ascii=False)
                     except Exception:
                         pass
         except Exception:
@@ -777,6 +842,7 @@ async def api_send(request: Request):
             pass
 
     # 3) 广播给所有 WebUI 客户端
+    saved["conv_type"] = (await get_conversation(conv_id) or {}).get("type", "group")
     await manager.broadcast({
         "type": "new_message",
         "data": saved,
@@ -797,10 +863,16 @@ async def api_recall_message(msg_db_id: int):
     qq_msg_id = msg.get("msg_id", "")
     conv_id = msg["conversation_id"]
 
-    # 调 QQ API 撤回
+    # 调 QQ API 撤回（按会话类型分流：私聊 → C2C 撤回）
     if qq_msg_id:
         try:
-            result = await recall_group_msg(conv_id, qq_msg_id)
+            from database import get_conversation
+            from PatchActiveMsg import recall_c2c_msg
+            conv = await get_conversation(conv_id)
+            if conv and conv.get("type") == "direct":
+                result = await recall_c2c_msg(conv_id, qq_msg_id)
+            else:
+                result = await recall_group_msg(conv_id, qq_msg_id)
             # 检查 QQ API 是否返回了错误
             if result.get("code") or result.get("err_code"):
                 err_msg = result.get("message", "") or result.get("msg", "") or "未知错误"
