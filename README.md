@@ -174,8 +174,10 @@ NeonBotChat/
 ├── config.example.yaml  # 配置文件示例
 ├── config.yaml          # 实际配置（含密钥，不提交 Git）
 ├── README.md            # 项目文档
-├── templates/
+├── web/
 │   └── index.html       # WebUI 前端（零框架依赖）
+│   └── css
+│   └── js
 └── file_server/         # 图床服务器（独立项目）
     ├── file_server.py
     ├── config.yaml
