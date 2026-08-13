@@ -6,6 +6,7 @@ import asyncio
 import json
 import queue
 import os
+import time as _time
 from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Query
@@ -407,6 +408,22 @@ async def api_save_settings(request: Request):
     return {"ok": True}
 
 
+@app.get("/api/bot-info")
+async def api_bot_info():
+    """读取机器人自身信息（GET /users/@me）。头像直接来自官方接口，成功后覆盖设置缓存"""
+    from PatchActiveMsg import get_bot_info
+    info = await get_bot_info()
+    avatar = (info or {}).get("avatar") or ""
+    if avatar:
+        data = _load_settings()
+        if data.get("avatar") != avatar:
+            data["avatar"] = avatar
+            _save_settings(data)
+    else:
+        avatar = (_load_settings().get("avatar") or "")  # 接口失败回退旧缓存
+    return {"ok": True, "username": (info or {}).get("username") or "", "avatar": avatar}
+
+
 @app.get("/api/link-preview")
 async def api_link_preview(url: str = Query(...)):
     """抓取网页元数据（标题/描述/图标），供链接卡片渲染"""
@@ -459,7 +476,7 @@ async def api_export(conv_id: str, format: str = "md"):
 
     msgs = await get_all_messages(conv_id)
     conv = await get_conversation(conv_id)
-    name = (conv or {}).get("name") or conv_id
+    name = (conv or {}).get("display_name") or (conv or {}).get("name") or conv_id
     if format == "json":
         content = json.dumps(msgs, ensure_ascii=False, indent=2)
         media_type = "application/json"
@@ -610,27 +627,429 @@ async def api_status():
 @app.get("/api/conversations")
 async def api_conversations(limit: int = 50, include_hidden: bool = False):
     convs = await get_conversations(limit, include_hidden=include_hidden)
+    # 私聊头像自动获取（PatchUserInfo），不用手动上传
+    await _fill_direct_avatars(convs)
     return {"conversations": convs}
 
 
-@app.post("/api/conversations")
-async def api_add_conversation(request: Request):
-    """手动添加群聊到会话列表"""
+@app.get("/api/avatar/{conv_id}")
+async def api_refresh_direct_avatar(conv_id: str):
+    """进入私聊页面时刷新一次个人头像：重新下载 q.qlogo.cn，更新内存缓存与数据库；失败静默保留旧头像"""
+    import base64 as _b64
+    from database import get_conversation, set_conversation_flags
+    from PatchUserInfo import getUserAvatar
+
+    conv = await get_conversation(conv_id)
+    if not conv or conv.get("type") != "direct":
+        return JSONResponse({"error": "会话不存在或不是私聊"}, status_code=404)
+    if not _BOT_APP_ID:
+        return {"ok": False, "avatar": ""}
+
+    img = await getUserAvatar(_BOT_APP_ID, conv_id)
+    if not isinstance(img, (bytes, bytearray)) or not img:
+        return {"ok": False, "avatar": ""}
+
+    url = "data:image/png;base64," + _b64.b64encode(img).decode("ascii")
+    _avatar_cache[conv_id] = url
+    try:
+        await set_conversation_flags(conv_id, avatar=url)
+    except Exception:
+        pass
+    return {"ok": True, "avatar": url}
+
+
+def _conv_group_info(conv: dict) -> dict:
+    """从会话记录提取群信息返回体（简介/分类/标签解析 JSON）"""
+    try:
+        tags = json.loads(conv.get("group_tags") or "[]")
+    except Exception:
+        tags = []
+    return {
+        "official_name": conv.get("official_name") or "",
+        "member_num": conv.get("member_num") or 0,
+        "memo": conv.get("group_memo") or "",
+        "class_text": conv.get("group_class") or "",
+        "tags": tags if isinstance(tags, list) else [],
+        "bot_role": conv.get("bot_role") or "",
+        "proactive_msg": conv.get("proactive_msg") if conv.get("proactive_msg") is not None else -1,
+        "recv_setting": conv.get("recv_setting") or "",
+        "display_name": conv.get("display_name") or conv.get("id") or "",
+    }
+
+
+@app.get("/api/group-info/{conv_id}")
+async def api_group_info(conv_id: str):
+    """进入群聊时实时查询一次群基本信息 + 机器人在群状态（失败回退旧缓存）。返回 display_name 供前端直接使用"""
+    from database import get_conversation, set_group_info, set_bot_state
+
+    conv = await get_conversation(conv_id)
+    if not conv or conv.get("type") != "group":
+        return JSONResponse({"error": "会话不存在或不是群聊"}, status_code=404)
+
+    from PatchActiveMsg import get_group_info, get_bot_state
+
+    # 实时查询群信息
+    raw = await get_group_info(conv_id)
+    state = await get_bot_state(conv_id)
+    if raw:
+        bot_role = (state or {}).get("member_role") or "" if state else None
+        proactive_msg = int(bool((state or {}).get("allow_proactive_msg"))) if state else None
+        recv_setting = (state or {}).get("recv_msg_setting") or "" if state else None
+        await set_group_info(
+            conv_id,
+            (raw.get("group_name") or "").strip(),
+            int(raw.get("group_member_num") or 0),
+            memo=(raw.get("group_finger_memo") or "").strip(),
+            class_text=(raw.get("group_class_text") or "").strip(),
+            tags=raw.get("group_tags") or [],
+            bot_role=bot_role,
+            proactive_msg=proactive_msg,
+            recv_setting=recv_setting,
+        )
+        conv = await get_conversation(conv_id)
+        return {"ok": True, **_conv_group_info(conv), "cached": False}
+
+    # 群信息拉取失败：bot_state 仍单独刷新，返回旧缓存
+    if state:
+        await set_bot_state(conv_id, state)
+        conv = await get_conversation(conv_id)
+
+    if conv.get("official_name") or conv.get("member_num"):
+        return {"ok": True, **_conv_group_info(conv), "cached": True}
+    return JSONResponse({"error": "群信息获取失败（可能无接口权限或限频）"}, status_code=503)
+
+
+@app.post("/api/mute")
+async def api_mute(request: Request):
+    """禁言/解除禁言群成员（需机器人是群管理员）。
+    op=add 禁言：seconds 最大 30 天，到期时间用服务器时间计算；op=del 立即解除禁言"""
     try:
         body = await request.json()
     except Exception:
         return JSONResponse({"error": "invalid json"}, status_code=400)
 
-    group_openid: str = (body.get("group_openid") or "").strip()
-    group_name: str = (body.get("name") or "").strip()
+    conv_id = body.get("conv_id", "")
+    member_openid = body.get("member_openid", "")
+    op = body.get("op", "add")
+    if op not in ("add", "del"):
+        return JSONResponse({"error": "op 必须是 add 或 del"}, status_code=400)
+    if not conv_id or not member_openid:
+        return JSONResponse({"error": "缺少 conv_id 或 member_openid"}, status_code=400)
 
-    if not group_openid:
-        return JSONResponse({"error": "group_openid 不能为空"}, status_code=400)
+    from database import get_conversation
+    conv = await get_conversation(conv_id)
+    if not conv or conv.get("type") != "group":
+        return JSONResponse({"error": "会话不存在或不是群聊"}, status_code=404)
 
-    name = group_name or f"群聊 {group_openid[:10]}"
-    await upsert_conversation(group_openid, name=name, conv_type="group")
+    from PatchActiveMsg import mute_member
+    if op == "del":
+        result = await mute_member(conv_id, member_openid, "", op="del")
+        if result is None:
+            return JSONResponse({"error": "解除禁言失败（可能机器人不是群管理员，或接口无权限）"}, status_code=502)
+        return {"ok": True, "action": "del"}
 
-    return {"ok": True, "id": group_openid, "name": name}
+    seconds = body.get("seconds", 0)
+    try:
+        seconds = int(seconds)
+    except (TypeError, ValueError):
+        seconds = 0
+    if seconds <= 0 or seconds > 30 * 24 * 3600:
+        return JSONResponse({"error": "禁言时长必须在 1 秒 ~ 30 天之间"}, status_code=400)
+
+    from datetime import datetime, timedelta, timezone
+    mute_expire_at = (datetime.now(timezone.utc) + timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    result = await mute_member(conv_id, member_openid, mute_expire_at, op="add")
+    if result is None:
+        return JSONResponse({"error": "禁言失败（可能机器人不是群管理员、对方是管理员/群主，或接口无权限）"}, status_code=502)
+    return {"ok": True, "action": "add", "mute_expire_at": mute_expire_at}
+
+
+_mute_status_cache: dict = {}  # conv_id -> (拉取时间戳, members)
+MUTE_STATUS_TTL = 2.0  # 前端 1s 轮询，QQ API 30 QPM 限制 → 后端缓存 2s（1s 内命中缓存直接返回）
+
+# ── 加群申请：内存 seen 集合（事件 + 轮询 + 审批去重）─────
+join_request_seen: dict[str, set] = {}  # group_openid -> 已见过的 join_request_id 集合
+
+
+def mark_join_request_seen(group_openid: str, join_request_id: str) -> None:
+    """标记该申请已处理过（事件/审批调用，避免轮询重复播报）"""
+    join_request_seen.setdefault(group_openid, set()).add(join_request_id)
+
+
+def is_join_request_seen(group_openid: str, join_request_id: str) -> bool:
+    return join_request_id in join_request_seen.get(group_openid, set())
+
+
+join_request_pending: dict[str, set] = {}  # group_openid -> 待审批 join_request_id 集合（前端徽章计数）
+
+
+_join_requests_cache: dict = {}  # conv_id -> (拉取时间戳, requests)
+JOIN_REQUESTS_TTL = 2.0  # 前端 1s 轮询，QQ API 30 QPM 限制 → 后端缓存 2s（与禁言一致）
+
+
+# 加群申请人头像：PatchUserInfo.getUserAvatar 下载（q.qlogo.cn）→ base64 data URL
+# 头像基本不变，内存永久缓存避免每 2s 重复下载
+_avatar_cache: dict = {}  # member_openid -> data URL
+_BOT_APP_ID = ""
+_cfg_path = os.path.join(os.path.dirname(__file__), "config.yaml")
+if not os.path.isfile(_cfg_path):
+    _cfg_path = os.path.join(os.path.dirname(__file__), "configs", "config.yaml")
+if os.path.isfile(_cfg_path):
+    try:
+        from botpy.ext.cog_yaml import read as _cfg_read
+        _BOT_APP_ID = str(_cfg_read(_cfg_path).get("appid", ""))
+    except Exception:
+        pass
+
+
+async def _fill_join_request_avatars(reqs: list) -> None:
+    """为每条加群申请补 avatar（base64 data URL）；失败静默，前端保留首字符占位"""
+    import base64 as _b64
+    from PatchUserInfo import getUserAvatar
+    if not reqs or not _BOT_APP_ID:
+        return
+    tasks = []
+    for r in reqs:
+        oid = (r.get("member_openid") or "")
+        if not oid:
+            continue
+        if oid in _avatar_cache:
+            r["avatar"] = _avatar_cache[oid]
+        else:
+            tasks.append((r, oid))
+    if not tasks:
+        return
+    results = await asyncio.gather(
+        *(getUserAvatar(_BOT_APP_ID, oid) for _, oid in tasks),
+        return_exceptions=True,
+    )
+    for (r, oid), img in zip(tasks, results):
+        if isinstance(img, (bytes, bytearray)) and img:
+            url = "data:image/png;base64," + _b64.b64encode(img).decode("ascii")
+            _avatar_cache[oid] = url
+            r["avatar"] = url
+
+
+async def _fill_direct_avatars(convs: list) -> None:
+    """私聊会话头像：PatchUserInfo.getUserAvatar 自动获取（q.qlogo.cn），持久化到库。
+    不再支持个人头像手动上传；头像基本不变，复用 _avatar_cache 避免重复下载"""
+    import base64 as _b64
+    from database import set_conversation_flags
+    from PatchUserInfo import getUserAvatar
+    if not convs or not _BOT_APP_ID:
+        return
+    tasks = []
+    for c in convs:
+        oid = c.get("id") or ""
+        if c.get("type") != "direct" or not oid or c.get("avatar_url"):
+            continue
+        if oid in _avatar_cache:
+            c["avatar_url"] = _avatar_cache[oid]
+        else:
+            tasks.append(c)
+    if tasks:
+        results = await asyncio.gather(
+            *(getUserAvatar(_BOT_APP_ID, c["id"]) for c in tasks),
+            return_exceptions=True,
+        )
+        for c, img in zip(tasks, results):
+            if isinstance(img, (bytes, bytearray)) and img:
+                url = "data:image/png;base64," + _b64.b64encode(img).decode("ascii")
+                _avatar_cache[c["id"]] = url
+                c["avatar_url"] = url
+    # 持久化（缓存命中且库里还没有头像时也补写一次，之后加载直接跳过）
+    for c in convs:
+        if c.get("type") == "direct" and c.get("avatar_url"):
+            try:
+                await set_conversation_flags(c["id"], avatar=c["avatar_url"])
+            except Exception:
+                pass
+
+
+@app.post("/api/system-note")
+async def api_system_note(request: Request):
+    """保存本地系统提示（禁言/解除禁言气泡），持久化到消息表（direction=center），刷新后仍可见"""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid json"}, status_code=400)
+
+    conv_id = body.get("conv_id", "")
+    member_name = body.get("member_name", "")
+    content = body.get("content", "")  # 如「被你禁言1天2小时」
+    if not conv_id or not content:
+        return JSONResponse({"error": "缺少 conv_id 或 content"}, status_code=400)
+
+    from database import save_message
+    saved = await save_message(
+        conversation_id=conv_id, sender_openid="", sender_name=member_name,
+        content=content, direction="center",
+    )
+    return {"ok": True, "id": saved.get("id") if isinstance(saved, dict) else 0}
+
+
+@app.get("/api/mute-status/{conv_id}")
+async def api_mute_status(conv_id: str):
+    """查询群当前被禁言的成员列表（GET /v2/groups/{conv_id}/restrict_chat_setting）"""
+    from database import get_conversation
+    conv = await get_conversation(conv_id)
+    if not conv or conv.get("type") != "group":
+        return JSONResponse({"error": "会话不存在或不是群聊"}, status_code=404)
+
+    cached = _mute_status_cache.get(conv_id)
+    if cached and _time.time() - cached[0] < MUTE_STATUS_TTL:
+        return {"ok": True, "members": cached[1], "cached": True}
+
+    from PatchActiveMsg import get_group_mutes
+    members = await get_group_mutes(conv_id)
+    if members is None:
+        # QQ API 失败（限频等）：有缓存则返回旧值，否则 502
+        if cached:
+            return {"ok": True, "members": cached[1], "cached": True}
+        return JSONResponse({"error": "查询禁言状态失败（可能接口无权限或限频）"}, status_code=502)
+    _mute_status_cache[conv_id] = (_time.time(), members)
+    return {"ok": True, "members": members}
+
+
+@app.get("/api/join-requests/summary")
+async def api_join_requests_summary():
+    """各管理群待审批申请数量（内存计数，事件+轮询维护）—— 前端图标徽章用。
+    ⚠️ 必须注册在 /api/join-requests/{conv_id} 之前，否则 summary 会被当成 conv_id"""
+    return {"ok": True,
+            "total": sum(len(s) for s in join_request_pending.values()),
+            "per_group": {gid: len(s) for gid, s in join_request_pending.items()}}
+
+
+@app.get("/api/join-requests/{conv_id}")
+async def api_join_requests(conv_id: str):
+    """查询群待审批的加群申请列表（需机器人是群管理员/群主；5s 短缓存防连点）"""
+    from database import get_conversation
+    conv = await get_conversation(conv_id)
+    if not conv or conv.get("type") != "group":
+        return JSONResponse({"error": "会话不存在或不是群聊"}, status_code=404)
+    if conv.get("bot_role") not in ("admin", "owner"):
+        return JSONResponse({"error": "机器人不是群管理员，无法查看加群申请"}, status_code=403)
+
+    cached = _join_requests_cache.get(conv_id)
+    if cached and _time.time() - cached[0] < JOIN_REQUESTS_TTL:
+        return {"ok": True, "requests": cached[1], "cached": True}
+
+    from PatchActiveMsg import get_join_requests
+    reqs = await get_join_requests(conv_id)
+    if reqs is None:
+        # QQ API 失败（限频等）：有缓存则返回旧值，否则 502
+        if cached:
+            return {"ok": True, "requests": cached[1], "cached": True}
+        return JSONResponse({"error": "获取加群申请失败（可能接口无权限或限频）"}, status_code=502)
+    _join_requests_cache[conv_id] = (_time.time(), reqs)
+    # 头像补全（首次下载，之后走内存缓存；失败保留首字符占位）
+    await _fill_join_request_avatars(reqs)
+    return {"ok": True, "requests": reqs}
+
+
+@app.post("/api/join-request/approval")
+async def api_join_request_approval(request: Request):
+    """手动审批加群申请：op=approve 同意 / decline 拒绝（可带拒绝原因、加入黑名单）"""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid json"}, status_code=400)
+
+    conv_id = body.get("conv_id", "")
+    member_openid = body.get("member_openid", "")
+    join_request_id = body.get("join_request_id", "")
+    op = body.get("op", "")
+    if op not in ("approve", "decline"):
+        return JSONResponse({"error": "op 必须是 approve 或 decline"}, status_code=400)
+    if not conv_id or not member_openid or not join_request_id:
+        return JSONResponse({"error": "缺少 conv_id / member_openid / join_request_id"}, status_code=400)
+
+    from database import get_conversation
+    conv = await get_conversation(conv_id)
+    if not conv or conv.get("type") != "group":
+        return JSONResponse({"error": "会话不存在或不是群聊"}, status_code=404)
+    if conv.get("bot_role") not in ("admin", "owner"):
+        return JSONResponse({"error": "机器人不是群管理员，无法审批"}, status_code=403)
+
+    from PatchActiveMsg import approval_join_request
+    result = await approval_join_request(
+        conv_id,
+        member_openid,
+        join_request_id,
+        op,
+        reject_reason=body.get("reject_reason", ""),
+        add_to_blacklist=bool(body.get("add_to_blacklist", False)),
+    )
+    if result is None:
+        return JSONResponse({"error": "审批失败（接口可能无权限或限频）"}, status_code=502)
+
+    # 审批成功：该申请已处理，标记 seen 避免轮询再播报；从待审批计数移除；失效列表缓存
+    mark_join_request_seen(conv_id, join_request_id)
+    join_request_pending.get(conv_id, set()).discard(join_request_id)
+    _join_requests_cache.pop(conv_id, None)
+
+    # 同意 → 生成「XXX加入了群聊。」系统消息（direction=center 居中气泡，名字蓝色可点）
+    # 走 save_message 入库：消息历史/会话预览/搜索均持久化，再广播到前端实时渲染
+    if op == "approve":
+        try:
+            from database import save_message, bot_name
+            username = (body.get("username") or "").strip() or member_openid
+            # 头像：复用申请列表下载过的缓存（data URL）；缓存缺失则现下载一次
+            # 存入 sender_avatar → 消息蓝字点开成员卡片显示真实头像，历史加载也持久化
+            avatar = _avatar_cache.get(member_openid, "")
+            if not avatar and _BOT_APP_ID:
+                import base64 as _b64
+                from PatchUserInfo import getUserAvatar
+                img = await getUserAvatar(_BOT_APP_ID, member_openid)
+                if img:
+                    avatar = "data:image/png;base64," + _b64.b64encode(img).decode("ascii")
+                    _avatar_cache[member_openid] = avatar
+            sys_msg = await save_message(
+                conv_id,
+                sender_openid=member_openid,
+                sender_name=username,
+                content="加入了群聊。",
+                direction="center",
+                sender_avatar=avatar,
+            )
+            sys_msg["bot_name"] = bot_name
+            await manager.broadcast({"type": "new_message", "data": sys_msg})
+        except Exception as e:
+            import logging as _std_logging
+            _std_logging.getLogger("web_server").warning(f"[JOIN_APPROVAL] 系统消息入库失败: {e}")
+
+    return {"ok": True}
+
+
+@app.post("/api/conversations")
+async def api_add_conversation(request: Request):
+    """手动添加好友或群聊到会话列表"""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid json"}, status_code=400)
+
+    conv_type: str = (body.get("conv_type") or "group").strip().lower()
+    openid: str = (body.get("openid") or body.get("group_openid") or "").strip()
+    if not openid:
+        return JSONResponse({"error": "OpenID 不能为空"}, status_code=400)
+
+    if conv_type == "direct":
+        # 好友：没填备注就尝试拉取真实昵称（拿不到退回默认名）
+        name = (body.get("name") or "").strip()
+        if not name:
+            try:
+                from PatchUserInfo import getUserName
+                real = await getUserName(_BOT_APP_ID, openid) if _BOT_APP_ID else ""
+                name = f"私聊 {real}" if real else f"私聊 {openid[:10]}"
+            except Exception:
+                name = f"私聊 {openid[:10]}"
+        await upsert_conversation(openid, name=name, conv_type="direct")
+        return {"ok": True, "id": openid, "name": name}
+
+    name = (body.get("name") or "").strip() or f"群聊 {openid[:10]}"
+    await upsert_conversation(openid, name=name, conv_type="group")
+    return {"ok": True, "id": openid, "name": name}
 
 
 @app.patch("/api/conversations/{conv_id}")
@@ -641,10 +1060,12 @@ async def api_update_conversation(conv_id: str, request: Request):
     except Exception:
         return JSONResponse({"error": "invalid json"}, status_code=400)
 
-    from database import rename_conversation, set_conversation_flags
+    from database import get_conversation, rename_conversation, set_conversation_flags
 
-    new_name = (body.get("name") or "").strip()
-    if new_name:
+    # 传了 name 就更新（可为空字符串 = 清除备注，回到官方群名显示）
+    has_name = "name" in body
+    new_name = (body.get("name") or "").strip() if has_name else ""
+    if has_name:
         await rename_conversation(conv_id, new_name)
 
     flags = {}
@@ -652,11 +1073,15 @@ async def api_update_conversation(conv_id: str, request: Request):
         if key in body:
             flags[key] = 1 if body[key] else 0
     if "avatar" in body:
+        # 个人头像不支持手动上传：由系统通过 PatchUserInfo 自动获取
+        c = await get_conversation(conv_id)
+        if c and c.get("type") == "direct":
+            return JSONResponse({"error": "个人头像由系统自动获取，不支持手动上传"}, status_code=400)
         flags["avatar"] = body["avatar"]  # 群头像（dataURL）
     if flags:
         await set_conversation_flags(conv_id, **flags)
 
-    if not new_name and not flags:
+    if not has_name and not flags:
         return JSONResponse({"error": "没有可更新的字段"}, status_code=400)
 
     return {"ok": True, "id": conv_id, "name": new_name, **flags}
@@ -887,14 +1312,30 @@ async def api_recall_message(msg_db_id: int):
         conn = sqlite3.connect(_os.path.join(_os.path.dirname(__file__), "neonbot.db"))
         conn.row_factory = sqlite3.Row
         conn.execute("UPDATE messages SET recalled=1 WHERE id=?", (msg_db_id,))
-        conn.execute(
-            "UPDATE conversations SET last_message='你撤回了一条消息', last_sender='', last_direction='' WHERE id=?",
+        # 预览：被撤回的是会话最新一条消息 → 显示撤回提示；
+        # 否则显示最新一条消息（未被撤回的那条）
+        top = conn.execute(
+            "SELECT id, content, sender_name, direction FROM messages "
+            "WHERE conversation_id=? ORDER BY id DESC LIMIT 1",
             (conv_id,)
+        ).fetchone()
+        if top and top["id"] == msg_db_id:
+            tip = '你撤回了一条消息' if msg.get("direction") == 'outgoing' \
+                else f'你撤回了成员{msg.get("sender_name") or ""}的一条消息'
+            preview = (tip, '', '')
+        else:
+            preview = (top["content"][:200], top["sender_name"], top["direction"]) if top else ('', '', '')
+        conn.execute(
+            "UPDATE conversations SET last_message=?, last_sender=?, last_direction=? WHERE id=?",
+            (*preview, conv_id),
         )
         row = conn.execute("SELECT * FROM messages WHERE id=?", (msg_db_id,)).fetchone()
+        result = dict(row) if row else None
+        if result:
+            result["preview"] = {"last_message": preview[0], "last_sender": preview[1], "last_direction": preview[2]}
         conn.commit()
         conn.close()
-        return dict(row) if row else None
+        return result
     recalled = await asyncio.to_thread(_do_recall)
     if recalled:
         recalled["bot_name"] = bot_name

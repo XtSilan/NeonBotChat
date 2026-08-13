@@ -14,6 +14,7 @@ body.light .msg-row.center .msg-bubble { background: rgba(200, 200, 210, 0.5); }
 body.light .chat-header.glass { background: rgba(232, 233, 237, 0.55); }
 body.light .input-area { background: rgba(232, 233, 237, 0.55); }
 body.light .settings-nav { background: rgba(232, 233, 237, 0.5); }
+body.light .settings-nav-fold { color: #1a1b1e; }
 body.light .chat-area.has-bg { background: transparent; }
 body.light .sidebar { background: rgba(232, 233, 237, 0.5); }
 body.light .side-rail { background: rgba(0,0,0,0.06); }
@@ -27,6 +28,8 @@ body.light .role-管理员 { color: #2a48b0; }
 body.light .quote-box { background: rgba(0,0,0,0.08); }
 body.light .file-card { background: rgba(0,0,0,0.06); }
 body.light .file-card:hover { background: rgba(0,0,0,0.12); }
+body.light .join-request-item { background: rgba(0,0,0,0.06); }
+body.light .join-request-item:hover { background: rgba(0,0,0,0.12); }
 body.light .input-quote-bar { background: rgba(0,0,0,0.06); }
 body.light .glass-btn { background: rgba(0,0,0,0.06); color: #1a1b1e; }
 body.light .glass-btn:hover { background: rgba(0,0,0,0.12); }
@@ -37,6 +40,19 @@ body.light .theme-btn { background: rgba(0,0,0,0.06); color: #1a1b1e; }
 body.light .theme-btn:hover { background: rgba(0,0,0,0.12); }
 body.light .theme-btn.active { background: var(--accent); color: #fff; }
 body.light .modal-box { background: rgba(240, 241, 244, 0.6); }
+body.light .group-info-card { background: rgba(242, 243, 246, 0.92); border-color: rgba(0,0,0,0.10); }
+body.light .member-card { background: rgba(242, 243, 246, 0.9); border-color: rgba(0,0,0,0.10); }
+body.light .mention-list { background: rgba(242, 243, 246, 0.95); border-color: rgba(0,0,0,0.10); }
+body.light .mention-item:hover { background: rgba(0, 0, 0, 0.08); }
+body.light .recv-warn-banner { background: rgba(210, 150, 30, 0.12); border-bottom-color: rgba(210, 150, 30, 0.2); color: #9a6a10; }
+body.light .header-name #chatNameInner:hover { background: rgba(0, 0, 0, 0.07); }
+body.light .header-name.card-open #chatNameInner { background: rgba(0, 0, 0, 0.16); }
+body.light .group-info-card .gic-tag { background: rgba(0,0,0,0.06); border-color: rgba(0,0,0,0.10); }
+body.light .group-info-card .gic-value.memo-trunc:hover { background: rgba(0, 0, 0, 0.07); }
+body.light .group-info-card .gic-value.memo-trunc:active { background: rgba(0, 0, 0, 0.16); }
+body.light .mute-wheel { background: rgba(0, 0, 0, 0.05); }
+body.light .mute-wheel::before { background: linear-gradient(to bottom, #f4f5f7, rgba(244, 245, 247, 0)); }
+body.light .mute-wheel::after { background: linear-gradient(to top, #f4f5f7, rgba(244, 245, 247, 0)); }
 body.light #logsContent { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.08); }
 body.light .img-placeholder { background: rgba(0,0,0,0.06); }
 body.light .msg-meta { color: #808080; }

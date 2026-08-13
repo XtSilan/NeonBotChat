@@ -65,6 +65,201 @@ async def _get_access_token() -> str:
             return _access_token
 
 
+async def get_group_info(group_openid: str) -> Optional[dict]:
+    """获取群基本信息（GET /v2/groups/{group_openid}/info）
+    返回 {group_name, group_member_num, ...}；失败（含无权限/限频）返回 None"""
+    try:
+        token = await _get_access_token()
+    except Exception as e:
+        _log.warning(f"[GROUP_INFO] token 获取失败: {e}")
+        return None
+    url = f"{BASE_URL}/v2/groups/{group_openid}/info"
+    headers = {"Authorization": f"{AUTH_TYPE} {token}"}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as resp:
+                if resp.status != 200:
+                    _log.warning(f"[GROUP_INFO] {group_openid} 请求失败: {resp.status} {await resp.text()}")
+                    return None
+                info = await resp.json()
+                _log.info(f"[GROUP_INFO] {group_openid} → {info.get('group_name')} ({info.get('group_member_num')}人)")
+                return info
+    except Exception as e:
+        _log.warning(f"[GROUP_INFO] {group_openid} 异常: {e}")
+        return None
+
+
+async def get_bot_info() -> Optional[dict]:
+    """获取机器人自身信息（GET /users/@me）→ {id, username, avatar, bot, ...}；失败返回 None"""
+    try:
+        token = await _get_access_token()
+    except Exception as e:
+        _log.warning(f"[BOT_INFO] token 获取失败: {e}")
+        return None
+    url = f"{BASE_URL}/users/@me"  # 注意：users/@me 不带 /v2 前缀（实测带 v2 返回 404）
+    headers = {"Authorization": f"{AUTH_TYPE} {token}"}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as resp:
+                if resp.status != 200:
+                    _log.warning(f"[BOT_INFO] 请求失败: {resp.status} {await resp.text()}")
+                    return None
+                info = await resp.json()
+                _log.info(f"[BOT_INFO] → {info.get('username')} avatar={bool(info.get('avatar'))}")
+                return info
+    except Exception as e:
+        _log.warning(f"[BOT_INFO] 异常: {e}")
+        return None
+
+
+async def get_bot_state(group_openid: str) -> Optional[dict]:
+    """获取机器人在群内的身份（GET /v2/groups/{group_openid}/bot_state）
+    返回 {member_openid, joined_at, member_role, ...}；失败（含无权限/限频）返回 None"""
+    try:
+        token = await _get_access_token()
+    except Exception as e:
+        _log.warning(f"[BOT_STATE] token 获取失败: {e}")
+        return None
+    url = f"{BASE_URL}/v2/groups/{group_openid}/bot_state"
+    headers = {"Authorization": f"{AUTH_TYPE} {token}"}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as resp:
+                if resp.status != 200:
+                    _log.warning(f"[BOT_STATE] {group_openid} 请求失败: {resp.status} {await resp.text()}")
+                    return None
+                state = await resp.json()
+                _log.info(f"[BOT_STATE] {group_openid} → {state.get('member_role')}")
+                return state
+    except Exception as e:
+        _log.warning(f"[BOT_STATE] {group_openid} 异常: {e}")
+        return None
+
+
+async def mute_member(group_openid: str, member_openid: str, mute_expire_at: str, op: str = "add") -> Optional[dict]:
+    """禁言/解除禁言群成员（POST /v2/groups/{group_openid}/restrict_chat_setting）
+    仅能操作普通成员，需机器人拥有群管理员身份
+    mute_expire_at: RFC3339 格式的禁言到期时间（UTC）；op=del 时传空串立即解除
+    成功返回响应 JSON（空对象），失败返回 None"""
+    try:
+        token = await _get_access_token()
+    except Exception as e:
+        _log.warning(f"[MUTE] token 获取失败: {e}")
+        return None
+    url = f"{BASE_URL}/v2/groups/{group_openid}/restrict_chat_setting"
+    headers = {"Authorization": f"{AUTH_TYPE} {token}"}
+    payload = {"members": [{"op": op, "member_openid": member_openid, "mute_expire_at": mute_expire_at}]}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    _log.warning(f"[MUTE] {group_openid} 请求失败: {resp.status} {body}")
+                    return None
+                _log.info(f"[MUTE] {group_openid} → {member_openid} {op} (expire {mute_expire_at or '立即'})")
+                return await resp.json()
+    except Exception as e:
+        _log.warning(f"[MUTE] {group_openid} 异常: {e}")
+        return None
+
+
+async def get_group_mutes(group_openid: str) -> Optional[list]:
+    """查询群当前被禁言的成员列表（GET /v2/groups/{group_openid}/restrict_chat_setting）
+    返回 members 数组（含 member_openid / mute_expire_at / username），失败返回 None"""
+    try:
+        token = await _get_access_token()
+    except Exception as e:
+        _log.warning(f"[MUTE_QUERY] token 获取失败: {e}")
+        return None
+    url = f"{BASE_URL}/v2/groups/{group_openid}/restrict_chat_setting"
+    headers = {"Authorization": f"{AUTH_TYPE} {token}"}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    _log.warning(f"[MUTE_QUERY] {group_openid} 请求失败: {resp.status} {body}")
+                    return None
+                data = await resp.json()
+                members = (data or {}).get("members") or []
+                _log.debug(f"[MUTE_QUERY] {group_openid} → {len(members)} 人在禁言中")
+                return members
+    except Exception as e:
+        _log.warning(f"[MUTE_QUERY] {group_openid} 异常: {e}")
+        return None
+
+
+async def get_join_requests(group_openid: str) -> Optional[list]:
+    """获取群待审批的加群申请列表（GET /v2/groups/{group_openid}/join_request_list）
+    cursor 分页（limit 100）翻到末页合并返回；每条含 join_request_id/member_openid/username/
+    apply_at/apply_source/risk_tips/verify_info/bot 等；失败返回 None（需群管理员身份，30 QPM）"""
+    try:
+        token = await _get_access_token()
+    except Exception as e:
+        _log.warning(f"[JOIN_REQ] token 获取失败: {e}")
+        return None
+    headers = {"Authorization": f"{AUTH_TYPE} {token}"}
+    items: list = []
+    cursor = ""
+    try:
+        async with aiohttp.ClientSession() as session:
+            while True:
+                url = f"{BASE_URL}/v2/groups/{group_openid}/join_request_list"
+                params = {"cursor": cursor, "limit": 100}
+                async with session.get(url, params=params, headers=headers) as resp:
+                    if resp.status != 200:
+                        body = await resp.text()
+                        _log.warning(f"[JOIN_REQ] {group_openid} 请求失败: {resp.status} {body}")
+                        return None
+                    data = await resp.json()
+                    items.extend((data or {}).get("list") or [])
+                    cursor = (data or {}).get("next_cursor") or ""
+                    if not cursor:
+                        break
+        _log.debug(f"[JOIN_REQ] {group_openid} → {len(items)} 条待审批申请")
+        return items
+    except Exception as e:
+        _log.warning(f"[JOIN_REQ] {group_openid} 异常: {e}")
+        return None
+
+
+async def approval_join_request(
+    group_openid: str,
+    member_openid: str,
+    join_request_id: str,
+    op: str,
+    reject_reason: str = "",
+    add_to_blacklist: bool = False,
+) -> Optional[dict]:
+    """审批加群申请（POST /v2/groups/{group_openid}/approval_join_request/{member_openid}）
+    op ∈ approve（通过）/ decline（拒绝）；成功返回响应 JSON，失败返回 None（60 QPM）"""
+    try:
+        token = await _get_access_token()
+    except Exception as e:
+        _log.warning(f"[JOIN_APPROVAL] token 获取失败: {e}")
+        return None
+    url = f"{BASE_URL}/v2/groups/{group_openid}/approval_join_request/{member_openid}"
+    headers = {"Authorization": f"{AUTH_TYPE} {token}"}
+    payload: dict = {"op": op, "join_request_id": join_request_id}
+    if op == "decline":
+        if reject_reason:
+            payload["reject_reason"] = reject_reason
+        if add_to_blacklist:
+            payload["add_to_member_blacklist"] = True
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    _log.warning(f"[JOIN_APPROVAL] {group_openid}/{member_openid} {op} 失败: {resp.status} {body}")
+                    return None
+                _log.info(f"[JOIN_APPROVAL] {group_openid}/{member_openid} {op} ✓")
+                return await resp.json()
+    except Exception as e:
+        _log.warning(f"[JOIN_APPROVAL] {group_openid} 异常: {e}")
+        return None
+
+
 async def send_group_msg(
     group_openid: str,
     content: str,

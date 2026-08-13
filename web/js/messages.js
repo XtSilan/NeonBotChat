@@ -150,20 +150,20 @@ function isDirectConv(msgConvType) {
 // ── 消息头像列（气泡外）───────────────────────────
 function msgAvatarHtml(direction, senderAvatar, senderName) {
   if (direction === 'outgoing') {
-    // 自己发的：用自己设置的头像，未设置则不显示头像列
+    // 自己发的：用自己设置的头像，未设置则不显示头像列（点击弹成员卡片，由 $messages 统一处理）
     return getBotAvatar()
-      ? `<div class="msg-avatar-col"><img src="${escHtml(getBotAvatar())}" class="msg-avatar-img" onerror="this.style.display='none'" alt="" onclick="event.stopPropagation();viewImage('${escHtml(getBotAvatar())}')"></div>`
+      ? `<div class="msg-avatar-col"><img src="${escHtml(getBotAvatar())}" class="msg-avatar-img" onerror="this.style.display='none'" alt=""></div>`
       : '';
   }
   if (senderAvatar) {
-    return `<div class="msg-avatar-col"><img src="${escHtml(senderAvatar)}" class="msg-avatar-img" onerror="this.style.display='none'" alt="" onclick="event.stopPropagation();viewImage('${escHtml(senderAvatar)}')"></div>`;
+    return `<div class="msg-avatar-col"><img src="${escHtml(senderAvatar)}" class="msg-avatar-img" onerror="this.style.display='none'" alt=""></div>`;
   }
   // 私聊：用会话头像（单聊即对方头像）
   if (direction !== 'outgoing' && currentConvType === 'direct') {
     const conv = findConvAnywhere(currentConv);
     const convAv = conv && conv.avatar_url;
     if (convAv) {
-      return `<div class="msg-avatar-col"><img src="${escHtml(convAv)}" class="msg-avatar-img" onerror="this.style.display='none'" alt="" onclick="event.stopPropagation();viewImage('${escHtml(convAv)}')"></div>`;
+      return `<div class="msg-avatar-col"><img src="${escHtml(convAv)}" class="msg-avatar-img" onerror="this.style.display='none'" alt=""></div>`;
     }
   }
   // 无头像：首字符占位
@@ -175,7 +175,11 @@ function msgMetaHtml(direction, senderName, memberRole) {
   if (!senderName) return '';
   const roleCls = memberRole ? ' role-' + memberRole : '';
   if (direction === 'outgoing') {
-    return `<div class="msg-meta meta-self${roleCls}">${icon('bot', 14)} ${escHtml(senderName.replace(/ 🤖$/, ''))}${roleBadge(memberRole)}</div>`;
+    // 机器人自己发的消息：身份取自群信息缓存（bot_state），徽章放在机器人标识前
+    const conv = findConvAnywhere(currentConv);
+    const role = memberRole || (conv && conv.bot_role) || '';
+    const cls = role ? ' role-' + role : '';
+    return `<div class="msg-meta meta-self${cls}"><span class="bot-role-badge">${roleBadge(role)}</span>${icon('bot', 14)} ${escHtml(senderName.replace(/ 🤖$/, ''))}</div>`;
   }
   return `<div class="msg-meta${roleCls}">${fmtBotMarker(escHtml(senderName))}${roleBadge(memberRole)}</div>`;
 }
@@ -201,6 +205,7 @@ function appendMessage(msg, scroll) {
   div.dataset.msgSenderAvatar = msg.sender_avatar || '';
   div.dataset.msgTimestamp = msg.timestamp || '';
   div.dataset.msgMemberRole = msg.member_role || '';
+  div.dataset.msgSenderOpenid = msg.sender_openid || '';
   div.dataset.msgType = msg.msg_type || 0;
   div.dataset.msgRefIdx = msg.ref_idx || '';
   div.dataset.msgQuotedRefIdx = msg.quoted_ref_idx || '';
@@ -259,12 +264,26 @@ function appendMessage(msg, scroll) {
     }
   } catch (e) {}
 
+  // 本地系统提示（禁言/解除禁言）：居中气泡，成员名蓝色
+  if (msg.direction === 'center') {
+    div.classList.remove('in', 'out');
+    div.classList.add('center');
+    div.innerHTML = `<div class="msg-bubble"><span class="mute-member-name">${escHtml(msg.sender_name || '')}</span>${escHtml(msg.content)}</div>`;
+    $messages.appendChild(div);
+    if (scroll) scrollBottom();
+    return;
+  }
+
   // 撤回消息特殊渲染
   if (msg.recalled) {
     div.classList.remove('in', 'out');
     div.classList.add('center');
-    const noReedit = ['[图片]','[视频]','[语音]','[文件]','[卡片消息]','[键盘]'].some(p => (msg.content || '').startsWith(p)) || (msg.msg_type == 8);
-    div.innerHTML = `<div class="msg-bubble">你撤回了一条消息${noReedit ? '' : ` <span class="reedit-link" onclick="reeditMessageContent('${encodeURIComponent(msg.content || '')}', ${msg.msg_type || 0}, '${msg.quoted_ref_idx || ''}', '${(msg.quoted_sender || '').replace(/'/g, "\\'")}', '${(msg.quoted_content || '').replace(/'/g, "\\'")}')">重新编辑</span>`}</div>`;
+    // 撤回自己的消息显示「你撤回了一条消息」+ 重新编辑；撤回别人的显示「你撤回了成员 XXX 的一条消息」
+    const isOwn = msg.direction === 'outgoing';
+    const noReedit = !isOwn || ['[图片]','[视频]','[语音]','[文件]','[卡片消息]','[键盘]'].some(p => (msg.content || '').startsWith(p)) || (msg.msg_type == 8);
+    const recallTip = isOwn ? '你撤回了一条消息'
+      : `你撤回了成员<span class="mute-member-name">${escHtml(msg.sender_name || '')}</span>的一条消息`;
+    div.innerHTML = `<div class="msg-bubble">${recallTip}${noReedit ? '' : ` <span class="reedit-link" onclick="reeditMessageContent('${encodeURIComponent(msg.content || '')}', ${msg.msg_type || 0}, '${msg.quoted_ref_idx || ''}', '${(msg.quoted_sender || '').replace(/'/g, "\\'")}', '${(msg.quoted_content || '').replace(/'/g, "\\'")}')">重新编辑</span>`}</div>`;
     $messages.appendChild(div);
     if (scroll) scrollBottom();
     return;
@@ -311,20 +330,32 @@ let pendingId = 0;
 let currentQuoteRef = null;  // 当前引用的消息 ref_idx
 let botDisplayName = '';  // Bot 自己的显示名称
 
+// 发送前检查：用进群时实时检查到的权限状态（conv.proactive_msg），不做额外网络请求
+// 返回 true 表示可以继续发送（非群聊 / 有权限 / 用户确认）；convId 可指定目标会话（转发用）
+async function ensureProactiveAllowed(convId) {
+  const conv = findConvAnywhere(convId || currentConv);
+  if (!conv || conv.type !== 'group') return true;
+  if (conv.proactive_msg === 1) return true;
+  return await showConfirm('当前群聊本机器人未被授予主动消息权限，是否确认继续发送？', 'warning', false, true);
+}
+
 async function sendMessage(retryMsgId) {
   const isRetry = !!retryMsgId;
   let content;
+  let retryEl = null;
   if (isRetry) {
     // 重发：从 data 属性取内容
-    const el = document.querySelector(`.msg-row[data-pending-id="${retryMsgId}"]`);
-    if (!el) return;
-    content = el.dataset.msgContent;
-    // 移除旧的失败气泡
-    el.remove();
+    retryEl = document.querySelector(`.msg-row[data-pending-id="${retryMsgId}"]`);
+    if (!retryEl) return;
+    content = retryEl.dataset.msgContent;
   } else {
     content = $msgInput.value.trim();
     if (!content || !currentConv) return;
   }
+
+  // 无主动消息权限的群：发送任何消息前先弹确认（取消则保留重发气泡）
+  if (!(await ensureProactiveAllowed())) return;
+  if (retryEl) retryEl.remove();
 
   // 检查是否发送为 markdown
   const msgType = $('#mdCheckbox').checked ? 2 : 0;
@@ -425,6 +456,7 @@ function replacePendingMessage(pendingId, realMsg) {
   el.dataset.msgSenderAvatar = realMsg.sender_avatar || '';
   el.dataset.msgTimestamp = realMsg.timestamp || '';
   el.dataset.msgMemberRole = realMsg.member_role || '';
+  el.dataset.msgSenderOpenid = realMsg.sender_openid || '';
   el.dataset.msgType = realMsg.msg_type || 0;
   el.dataset.msgRefIdx = realMsg.ref_idx || '';
   el.removeAttribute('data-pending-id');
@@ -477,6 +509,66 @@ $msgInput.addEventListener('keydown', (e) => {
 $msgInput.addEventListener('input', () => {
   $msgInput.style.height = 'auto';
   $msgInput.style.height = Math.min($msgInput.scrollHeight, 120) + 'px';
+});
+// ── @提及：输入 @ 弹出成员列表，继续打字检索；无匹配自动消失；点击纯文本填充 ──
+function collectConvUsers() {
+  const users = new Map();  // openid → {name, avatar}
+  document.querySelectorAll('#messages .msg-row[data-msg-sender-openid]').forEach((row) => {
+    const oid = row.dataset.msgSenderOpenid;
+    const nm = row.dataset.msgSender;
+    if (!oid || !nm || oid === 'self') return;  // 排除机器人自己
+    if (!users.has(oid)) users.set(oid, { name: nm, avatar: row.dataset.msgSenderAvatar || '' });
+  });
+  return [...users.entries()].map(([openid, u]) => ({ openid, name: u.name, avatar: u.avatar }));
+}
+function updateMentionList() {
+  const list = $('#mentionList');
+  if (!list) return;
+  const el = $msgInput;
+  const selStart = el.selectionStart;
+  const text = el.value;
+  const atIdx = text.lastIndexOf('@', selStart - 1);
+  // 光标前无 @，或 @ 与光标间有换行（多行输入）→ 关闭
+  if (atIdx === -1 || text.slice(atIdx, selStart).includes('\n')) { list.style.display = 'none'; return; }
+  const query = text.slice(atIdx + 1, selStart).trim();
+  const users = collectConvUsers().filter(u => u.name.toLowerCase().includes(query.toLowerCase()));
+  if (!users.length) { list.style.display = 'none'; return; }  // 无匹配 → 自动消失
+  list.innerHTML = users.map(u => `
+    <div class="mention-item" data-name="${escHtml(u.name)}">
+      <div class="mi-avatar">${u.avatar ? `<img src="${escHtml(u.avatar)}" alt="">` : escHtml((u.name || '?')[0])}</div>
+      <div class="mi-name">${escHtml(u.name)}</div>
+    </div>`).join('');
+  // 列表宽度 = 输入框宽度（右边缘对齐按钮，不留空白）
+  list.style.width = el.getBoundingClientRect().width + 'px';
+  list.style.display = 'block';
+  // 用 mousedown + preventDefault：在输入框 blur 前执行，保持焦点
+  list.querySelectorAll('.mention-item').forEach((item) => {
+    item.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const name = item.dataset.name;
+      const pos = el.selectionStart;
+      const t = el.value;
+      const at = t.lastIndexOf('@', pos - 1);
+      if (at === -1) return;
+      el.value = t.slice(0, at + 1) + name + t.slice(pos);  // @XX → @指定用户
+      const np = at + 1 + name.length;
+      el.selectionStart = el.selectionEnd = np;
+      el.focus();
+      el.dispatchEvent(new Event('input'));  // 触发高度自动调整
+      list.style.display = 'none';
+    });
+  });
+}
+$msgInput.addEventListener('input', updateMentionList);
+$msgInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' || e.key === 'Enter') {
+    const list = $('#mentionList');
+    if (list) list.style.display = 'none';
+  }
+});
+$msgInput.addEventListener('blur', () => {
+  const list = $('#mentionList');
+  if (list) list.style.display = 'none';
 });
 // ── 富媒体上传 ────────────────────────────────────────
 function toggleMD() {

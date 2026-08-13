@@ -212,6 +212,9 @@ $('#btnSendKbd').addEventListener('click', async () => {
     try { kbdObj = JSON.parse(kbdStr); } catch (e) { showToast('⚠ 键盘 JSON 格式错误'); return; }
   }
 
+  // 无主动消息权限的群：发送前弹确认（取消则不关弹窗）
+  if (!(await ensureProactiveAllowed())) return;
+
   $('#kbdModal').classList.remove('show');
   const body = { conv_id: currentConv, content: msg, msg_type: 2 };
   if (kbdObj) body.keyboard = kbdObj;
@@ -270,6 +273,9 @@ $('#btnSendCard').addEventListener('click', async () => {
     try { JSON.parse(jsonStr); } catch (e) { showToast('⚠ JSON 格式错误'); return; }
   }
 
+  // 无主动消息权限的群：发送前弹确认（取消则不关弹窗）
+  if (!(await ensureProactiveAllowed())) return;
+
   $('#cardModal').classList.remove('show');
   try {
     const r = await API('/api/send', {
@@ -282,15 +288,26 @@ $('#btnSendCard').addEventListener('click', async () => {
   } catch (e) { showToast('⚠ 网络错误: ' + e.message); }
 });
 
-// ── 添加群聊弹窗 ────────────────────────────────────
+// ── 添加好友或群聊弹窗 ────────────────────────────────
 const $addModal = $('#addConvModal');
 const $newConvId = $('#newConvId');
 const $newConvName = $('#newConvName');
+let addConvType = 'group';  // group | direct
+
+function setAddConvType(t) {
+  addConvType = t;
+  $('#btnAddTypeGroup').classList.toggle('active', t === 'group');
+  $('#btnAddTypeDirect').classList.toggle('active', t === 'direct');
+  $('#newConvIdLabel').textContent = t === 'direct' ? '用户 OpenID' : '群 OpenID';
+  $('#newConvId').placeholder = t === 'direct' ? '粘贴用户 openid…' : '粘贴群 group_openid…';
+  $('#newConvName').placeholder = t === 'direct' ? '例如：小明' : '例如：摸鱼群';
+}
 
 function showAddModal() {
   $addModal.classList.add('show');
   $newConvId.value = '';
   $newConvName.value = '';
+  setAddConvType('group');
   $newConvId.focus();
 }
 function hideAddModal() {
@@ -298,21 +315,23 @@ function hideAddModal() {
 }
 
 $('#btnAddConv').addEventListener('click', showAddModal);
+$('#btnAddTypeGroup').addEventListener('click', () => setAddConvType('group'));
+$('#btnAddTypeDirect').addEventListener('click', () => setAddConvType('direct'));
 $('#btnCancelAdd').addEventListener('click', hideAddModal);
 $addModal.addEventListener('click', (e) => {
   if (e.target === $addModal) hideAddModal();
 });
 
 $('#btnOkAdd').addEventListener('click', async () => {
-  const groupOpenid = $newConvId.value.trim();
-  if (!groupOpenid) { alert('请输入群 OpenID'); return; }
+  const openid = $newConvId.value.trim();
+  if (!openid) { alert(addConvType === 'direct' ? '请输入用户 OpenID' : '请输入群 OpenID'); return; }
   const name = $newConvName.value.trim();
 
   try {
     const result = await API('/api/conversations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ group_openid: groupOpenid, name }),
+      body: JSON.stringify({ conv_type: addConvType, openid, name }),
     });
     if (result.error) { alert('添加失败: ' + result.error); return; }
 
@@ -323,7 +342,7 @@ $('#btnOkAdd').addEventListener('click', async () => {
     conversations = data.conversations || [];
     renderConvList();
 
-    // 自动选中新添加的群
+    // 自动选中新添加的会话
     selectConv(result.id);
   } catch (e) {
     alert('网络错误: ' + e.message);
@@ -345,15 +364,19 @@ const $renameInput = $('#renameConvInput');
 function showRenameModal() {
   if (!currentConv) return;
   const conv = conversations.find(c => c.id === currentConv);
-  $renameInput.value = conv ? conv.name : '';
+  // 预填：已有备注用备注，否则用当前显示名（官方群名）作为修改起点
+  $renameInput.value = conv ? (conv.user_note || conv.display_name || conv.name || '') : '';
   $('#convOpenIdText').textContent = currentConv;
   // 私聊文案「个人」化
   const isDirect = conv && conv.type === 'direct';
   $renameModal.querySelector('h3').innerHTML = `<img src="icons/settings.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> ${isDirect ? '个人设置' : '群聊设置'}`;
   $('#convOpenIdLabel').textContent = isDirect ? '用户 OpenID' : '群 OpenID';
-  $('#convAvatarUpload').title = isDirect ? '点击上传个人头像' : '点击上传群头像';
+  // 个人头像由系统自动获取（PatchUserInfo）：上传框去掉，只保留头像展示
+  $('#convAvatarUpload').classList.toggle('avatar-static', isDirect);
+  $('#convAvatarUpload').title = isDirect ? '' : '点击上传群头像';
+  $('#convAvatarHint').style.display = isDirect ? 'none' : '';
   // 群头像预览 + 群名
-  $('#convAvatarName').textContent = conv ? (conv.name || currentConv) : currentConv;
+  $('#convAvatarName').textContent = conv ? (conv.display_name || conv.name || currentConv) : currentConv;
   const av = conv && conv.avatar_url ? conv.avatar_url : '';
   if (av) {
     $('#convAvatarImg').src = av;
@@ -362,18 +385,23 @@ function showRenameModal() {
   } else {
     $('#convAvatarImg').style.display = 'none';
     $('#convAvatarPlaceholder').style.display = '';
-    $('#convAvatarPlaceholder').textContent = ((conv && conv.name) || currentConv || '?')[0];
+    $('#convAvatarPlaceholder').textContent = ((conv && (conv.display_name || conv.name)) || currentConv || '?')[0];
   }
   $renameModal.classList.add('show');
   $renameInput.focus();
   $renameInput.select();
 }
 
-// ── 群头像上传 ──────────────────────────────────────
-$('#convAvatarUpload').addEventListener('click', () => $('#convAvatarFile').click());
+// ── 群头像上传（个人头像系统自动获取，上传框已去掉） ──
+$('#convAvatarUpload').addEventListener('click', () => {
+  const conv = conversations.find(c => c.id === currentConv);
+  if (conv && conv.type === 'direct') return;  // 静态展示，无上传交互
+  $('#convAvatarFile').click();
+});
 $('#convAvatarFile').addEventListener('change', async (e) => {
   const file = e.target.files[0];
-  if (!file || !currentConv) return;
+  const conv = conversations.find(c => c.id === currentConv);
+  if (!file || !currentConv || (conv && conv.type === 'direct')) return;
   if (file.size > 2 * 1024 * 1024) { showToast('⚠ 图片不能超过 2MB'); return; }
   const reader = new FileReader();
   reader.onload = async () => {
@@ -445,7 +473,7 @@ $renameInput.addEventListener('keydown', (e) => {
 
 $('#btnOkRename').addEventListener('click', async () => {
   const newName = $renameInput.value.trim();
-  if (!newName || !currentConv) return;
+  if (!currentConv) return;  // 备注可为空 = 清除备注
 
   try {
     const result = await API(`/api/conversations/${currentConv}`, {
@@ -457,10 +485,18 @@ $('#btnOkRename').addEventListener('click', async () => {
 
     hideRenameModal();
 
-    // 更新本地缓存 & UI
+    // 更新本地缓存 & UI（user_note 优先于官方群名显示；清空后回落到官方群名）
     const conv = conversations.find(c => c.id === currentConv);
-    if (conv) conv.name = newName;
-    $chatName.textContent = newName;
+    if (conv) {
+      conv.name = newName;
+      conv.user_note = newName;
+      conv.display_name = newName || conv.official_name || conv.name || conv.id;
+    }
+    if (searchResults) {
+      const sc = searchResults.find(c => c.id === currentConv);
+      if (sc) { sc.name = newName; sc.user_note = newName; sc.display_name = newName || sc.official_name || sc.name || sc.id; }
+    }
+    $('#chatNameInner').textContent = fmtConvTitle(conv || { id: currentConv, name: newName });
     renderConvList($searchInput.value);
   } catch (e) {
     alert('网络错误: ' + e.message);
@@ -578,6 +614,16 @@ $('#settingsNav').addEventListener('click', (e) => {
   }
 });
 
+// 移动端：收起/展开导航文字（只留图标，右侧内容区更宽）
+$('#btnNavFold').addEventListener('click', () => {
+  const nav = $('#settingsNav');
+  const folded = nav.classList.toggle('folded');
+  const btn = $('#btnNavFold');
+  btn.classList.toggle('active', folded);
+  btn.title = folded ? '展开导航文字' : '收起导航文字';
+  btn.querySelector('img').src = 'icons/' + (folded ? 'right_arrow' : 'left_arrow') + '.svg';
+});
+
 // ── 状态页面 ─────────────────────────────────────────
 let statusTimer = null;
 
@@ -597,7 +643,7 @@ async function refreshStatus() {
     const info = await API('/api/system-info');
     $sc.innerHTML = `
       <div style="text-align:center;margin-bottom:12px;position:relative;">
-        <span style="font-size:1.1em;font-weight:700;"><img src="icons/bot.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> NeonBotChat v26.8.5</span>
+        <span style="font-size:1.1em;font-weight:700;"><img src="icons/bot.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> NeonBotChat v26.8.6</span>
         <button class="glass-btn danger" onclick="restartServer()" style="position:absolute;right:0;top:0;padding:3px 10px;font-size:0.75em;color:var(--danger);"><img src="icons/restart_red.svg" style="width:12px;height:12px;filter:none;" alt=""> 重启服务</button>
       </div>
       <div class="stat-card">
@@ -855,6 +901,7 @@ async function loadServerSettings() {
     if (serverSettings._developer_mode) {
       $('#richCustom').style.display = '';
     }
+    await refreshBotAvatar();  // 头像直接读官方接口（GET /users/@me）
   }
   catch { serverSettings = {}; }
 }
@@ -893,7 +940,6 @@ $('#bioInput').addEventListener('keydown', (e) => {
 
 // ── Bot 头像 ─────────────────────────────────────────
 function getBotAvatar() { return serverSettings.avatar || ''; }
-async function saveBotAvatar(dataUrl) { await saveServerSetting('avatar', dataUrl); }
 function applyBotAvatar() {
   const av = getBotAvatar();
   if (av) {
@@ -913,22 +959,22 @@ function applyBotAvatar() {
   }
 }
 
-// 点击侧侧栏头像 → 打开设置并跳到「账号与安全」换头像
+// 头像来自官方接口（GET /users/@me），不提供手动上传
+// 页面加载时拉取并覆盖 serverSettings.avatar
+async function refreshBotAvatar() {
+  try {
+    const r = await API('/api/bot-info');
+    if (r && r.avatar) {
+      serverSettings.avatar = r.avatar;
+      applyBotAvatar();
+    }
+  } catch {}
+}
+
+// 点击侧栏头像 → 打开设置并跳到「机器人信息」（头像只读，不提供上传）
 $('#railBotAvatar').addEventListener('click', () => {
   $settingsModal.classList.add('show');
   document.querySelector('.settings-nav-item[data-tab="account"]').click();
-});
-
-$('#botAvatarUpload').addEventListener('click', () => $('#botAvatarFile').click());
-$('#botAvatarFile').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = async () => {
-    await saveBotAvatar(reader.result);
-    applyBotAvatar();
-  };
-  reader.readAsDataURL(file);
 });
 
 // 更新账号页的 Bot 名称
@@ -939,10 +985,21 @@ function updateAccountBotName() {
 }
 
 // ── 自定义确认弹窗 ────────────────────────────────────
-function showConfirm(msg, iconName = 'warning', danger = true, showCancel = true, thirdText = '', previewUrl = '', previewType = '') {
+function showConfirm(msg, iconName = 'warning', danger = true, showCancel = true, thirdText = '', previewUrl = '', previewType = '', inputPlaceholder = '') {
   return new Promise(resolve => {
     $('#confirmMsg').textContent = msg;
     $('#confirmIcon').innerHTML = '<img src="icons/' + iconName + '.svg" class="svg-icon" style="width:36px;height:36px;" alt="">';
+    // 可选输入框（如拒绝原因）：传 inputPlaceholder 则显示；返回 {action, reason}
+    const input = $('#confirmInput');
+    const hasInput = !!inputPlaceholder;
+    if (hasInput) {
+      input.value = '';
+      input.placeholder = inputPlaceholder;
+      input.style.display = '';
+      input.focus();
+    } else {
+      input.style.display = 'none';
+    }
     // 图片/视频预览（粘贴发送用）
     const $pv = $('#confirmPreview');
     const $pvi = $('#confirmPreviewImg');
@@ -973,9 +1030,9 @@ function showConfirm(msg, iconName = 'warning', danger = true, showCancel = true
       thirdBtn.style.display = 'none';
     }
     $('#confirmDialog').classList.add('show');
-    const ok = () => { cleanup(); hideConfirm(); resolve(true); };
+    const ok = () => { cleanup(); hideConfirm(); resolve(hasInput ? { action: true, reason: input.value } : true); };
     const cancel = () => { cleanup(); hideConfirm(); resolve(false); };
-    const third = () => { cleanup(); hideConfirm(); resolve('third'); };
+    const third = () => { cleanup(); hideConfirm(); resolve(hasInput ? { action: 'third', reason: input.value } : 'third'); };
     // 按钮焦点：←/→ 或 ↑/↓ 切换，Enter 触发当前高亮，Esc 取消
     const btns = [];
     if (thirdText) btns.push(thirdBtn);
@@ -987,6 +1044,11 @@ function showConfirm(msg, iconName = 'warning', danger = true, showCancel = true
     };
     updateKbFocus();
     const onKey = (e) => {
+      // 输入框内：方向键保留光标移动（不切按钮高亮），Enter 直接确认
+      if (hasInput && e.target === input) {
+        if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); ok(); }
+        return;
+      }
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancel(); }
       else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
         e.preventDefault(); e.stopPropagation();
@@ -1002,6 +1064,7 @@ function showConfirm(msg, iconName = 'warning', danger = true, showCancel = true
     function cleanup() {
       document.removeEventListener('keydown', onKey, true);
       btns.forEach(b => b.classList.remove('kb-focus'));
+      input.style.display = 'none';
     }
     $('#confirmOk').onclick = ok;
     $('#confirmCancel').onclick = cancel;

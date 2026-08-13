@@ -84,6 +84,30 @@ def _ensure_group_message_create_parser() -> None:
     setattr(ConnectionState, "parse_group_message_create", parse_group_message_create)
 
 
+def _ensure_group_join_request_parser() -> None:
+    """补丁：botpy 1.2.1 没有 GROUP_JOIN_REQUEST 解析器，动态挂一个。
+    事件数据（payload.d）直接以 dict 形式 dispatch → on_group_join_request(data)"""
+    if hasattr(ConnectionState, "parse_group_join_request"):
+        return
+
+    def parse_group_join_request(self: ConnectionState, payload: Dict[str, Any]) -> None:
+        try:
+            data = payload.get("d", {}) or {}
+            logger.info(
+                "[QQOfficial] 📥 加群申请事件: %s 申请加入 %s (join_request_id=%s)",
+                data.get("username", ""),
+                data.get("group_openid", ""),
+                data.get("join_request_id", "")[:12],
+            )
+            self._dispatch("group_join_request", data)
+        except Exception as e:
+            logger.warning(
+                "[QQOfficial] Failed to parse GROUP_JOIN_REQUEST: %s", e, exc_info=True
+            )
+
+    setattr(ConnectionState, "parse_group_join_request", parse_group_join_request)
+
+
 def clean_group_message_content(content: str, mentions: list) -> str:
     if not content:
         return ""
@@ -147,6 +171,7 @@ def get_raw_attachments(msg_id: str) -> list:
 
 __all__ = [
     "_ensure_group_message_create_parser",
+    "_ensure_group_join_request_parser",
     "clean_group_message_content",
     "is_bot_mentioned",
     "is_author_bot",

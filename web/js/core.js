@@ -11,6 +11,7 @@ const $messages = $('#messages');
 const $chatEmpty = $('#chatEmpty');
 const $chatHeader = $('#chatHeader');
 const $chatName = $('#chatName');
+const $chatNameInner = $('#chatNameInner');
 const $chatAvatar = $('#chatAvatar');
 const $inputArea = $('#inputArea');
 const $msgInput = $('#msgInput');
@@ -49,6 +50,8 @@ function connectWS() {
           conversations = d.conversations || [];
           renderConvList($searchInput.value);
         });
+      } else if (data.type === 'join_request') {
+        handleJoinRequestPush(data.data);
       }
     } catch (e) {
       console.warn('[WS] parse error', e);
@@ -74,7 +77,7 @@ function notifyNewMessage(msg) {
   const isCurrent = currentConv === msg.conversation_id;
   if (!isAt && isCurrent) return;  // 正在看的会话不打扰
   const conv = findConvAnywhere(msg.conversation_id);
-  const name = conv ? (conv.name || conv.id) : msg.conversation_id;
+  const name = conv ? (conv.display_name || conv.name || conv.id) : msg.conversation_id;
   // 私聊不显示发送者 openid 前缀
   const senderLabel = msg.conv_type === 'direct' ? '' : (msg.sender_name ? msg.sender_name + ': ' : '');
   const body = senderLabel + (msg.content || '[图片/语音]');
@@ -89,7 +92,8 @@ function notifyNewMessage(msg) {
 }
 
 function handleIncomingMessage(msg) {
-  notifyNewMessage(msg);
+  // 系统消息（direction=center，如「XXX加入了群聊。」）不弹桌面通知
+  if (msg.direction !== 'center') notifyNewMessage(msg);
   // 隐藏会话收到新消息：不插入会话列表，只更新搜索缓存
   if (msg.conversation_hidden) {
     if (searchResults) {
@@ -155,6 +159,9 @@ function convPreview(c) {
   // 折叠换行/连续空白为单空格，保证预览始终单行省略
   const m = String(c.last_message).replace(/\s+/g, ' ').trim();
   if (!m) return '';
+  if (c.last_direction === 'center' && c.last_sender) {
+    return c.last_sender + m;  // 系统气泡（禁言等）：名字内容，无空格
+  }
   if (c.last_direction === 'incoming' && c.last_sender) {
     if (c.type === 'direct') return m;  // 私聊不显示发送者 openid
     return c.last_sender + ': ' + m;
@@ -168,7 +175,7 @@ function renderConvList(filter = '') {
   const q = filter.toLowerCase();
   const source = searchResults || conversations;
   const filtered = source.filter(c =>
-    !q || c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q)
+    !q || (c.display_name || c.name || '').toLowerCase().includes(q) || c.id.toLowerCase().includes(q)
   ).sort((a, b) => (b.pinned || 0) - (a.pinned || 0));
 
   $convList.innerHTML = filtered.length === 0
@@ -176,9 +183,9 @@ function renderConvList(filter = '') {
     : filtered.map(c => `
       <div class="conv-item${c.id === currentConv ? ' active' : ''}${c.pinned ? ' pinned' : ''}${c.hidden ? ' hidden-item' : ''}"
            data-id="${c.id}" onclick="selectConv('${c.id}')">
-        <div class="avatar">${c.avatar_url ? `<img src="${escHtml(c.avatar_url)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">` : `${(c.name || c.id)[0]}`}</div>
+        <div class="avatar">${c.avatar_url ? `<img src="${escHtml(c.avatar_url)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">` : `${(c.display_name || c.name || c.id)[0]}`}</div>
         <div class="info">
-          <div class="name">${c.at ? '<span class="at-tag">@</span>' : ''}${escHtml(c.name || c.id)}${c.hidden ? '<span style="color:var(--text-dim);font-size:0.75em;margin-left:6px;">(已隐藏)</span>' : ''}</div>
+          <div class="name">${c.at ? '<span class="at-tag">@</span>' : ''}${escHtml(c.display_name || c.name || c.id)}${c.hidden ? '<span style="color:var(--text-dim);font-size:0.75em;margin-left:6px;">(已隐藏)</span>' : ''}</div>
           <div class="preview">${escHtmlWithBr(convPreview(c) || '暂无消息')}</div>
         </div>
         ${c.unread_count ? `<span class="badge${c.muted ? ' muted' : ''}">${c.unread_count > 99 ? '99+' : c.unread_count}</span>` : ''}
@@ -277,6 +284,25 @@ function roleBadge(role) {
   return '';
 }
 
+// 群信息返回机器人身份后，回填所有已渲染的机器人消息徽章（.bot-role-badge 占位）
+function applyBotRoleBadge(role) {
+  const html = roleBadge(role);
+  document.querySelectorAll('.bot-role-badge').forEach(el => { el.innerHTML = html; });
+}
+
+// 顶栏下方常驻提示：recv_setting 已知且非 all 时显示（不自动关闭，退出群聊/私聊时隐藏）
+// 手动关闭后本会话内不再显示（刷新页面重置）；进群时随群信息检查结果更新
+const dismissedRecvWarn = new Set();
+function updateRecvBanner(conv) {
+  const show = !!(conv && conv.type === 'group' && conv.recv_setting && conv.recv_setting !== 'all'
+                  && !dismissedRecvWarn.has(conv.id));
+  $('#recvWarnBanner').style.display = show ? 'flex' : 'none';
+}
+$('#recvWarnClose').addEventListener('click', () => {
+  if (currentConv) dismissedRecvWarn.add(currentConv);
+  $('#recvWarnBanner').style.display = 'none';
+});
+
 // ── 选择会话 ────────────────────────────────────────
 // ── 聊天区切换动画 ──────────────────────────────────
 // fromEl 向上收（覆盖层滑出），toEl 向下展开
@@ -325,6 +351,14 @@ function showHomeView(skipAnim) {
     sb.style.display = 'none';  // 首次加载：直接隐藏无动画
   }
   $('#homeStats').style.display = '';
+  // 手机端：主页模式同样显示聊天区（统计看板），否则 .chat-area 在移动端是 display:none
+  // （进入聊天时有 mobile-open，主页此前漏了 → 统计卡片直接消失）
+  // home-mode：卡片不盖侧栏（从窄栏右侧开始）+ 窄屏横滑浏览
+  if (window.innerWidth <= 768) {
+    const ca = document.getElementById('chatArea');
+    ca.classList.add('mobile-open');
+    ca.classList.add('home-mode');
+  }
   loadHomeStats();
   $('#chatEmptyHint').style.display = 'none';
   $('#btnExportReport').style.display = '';  // 主页模式显示导出周报
@@ -346,6 +380,7 @@ function showHomeView(skipAnim) {
 function showChatView(skipAnim) {
   viewMode = 'chat';
   currentConv = '';
+  document.getElementById('chatArea').classList.remove('home-mode');  // 主页模式样式（横滑/不盖侧栏）
   renderConvList($searchInput.value);  // 清除会话高亮
   // 恢复两侧栏（含侧侧栏，手机端进入聊天时可能被隐藏）
   document.querySelectorAll('.sidebar, .side-rail').forEach(el => el.style.display = '');
@@ -386,20 +421,125 @@ $('#railMsgBtn').addEventListener('click', showChatView);
 $('#railMsgBtn').classList.add('active');  // 初始默认消息视图
 
 // 聊天顶栏头像（有群头像显示图片，否则首字母）
+// 会话标题：显示名（备注>官方群名>旧名）+ 群人数
+function fmtConvTitle(conv) {
+  let n = conv.display_name || conv.name || conv.id;
+  if (conv.type === 'group' && conv.member_num > 0) n += ` (${conv.member_num})`;
+  return n;
+}
+
+// ── 群信息卡片（点击聊天头群名弹出） ────────────────
+const $groupInfoCard = $('#groupInfoCard');
+
+// group_tags 可能是数组（/api/group-info 缓存）或 JSON 字符串（会话列表），统一解析成数组
+function parseGroupTags(t) {
+  if (Array.isArray(t)) return t;
+  if (typeof t === 'string') {
+    try {
+      const a = JSON.parse(t);
+      return Array.isArray(a) ? a : [];
+    } catch (e) { return []; }
+  }
+  return [];
+}
+
+function renderGroupInfoCard(conv) {
+  // 第一行：群名（不带人数）
+  $('#gicName').textContent = conv.display_name || conv.name || conv.id;
+  // 第二行：完整 OpenID + (N人)
+  const oid = conv.id || '';
+  $('#gicId').textContent = `${oid}${conv.member_num > 0 ? `(${conv.member_num}人)` : ''}`;
+  const av = conv.avatar_url || '';
+  if (av) {
+    $('#gicAvatar').innerHTML = `<img src="${escHtml(av)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">`;
+  } else {
+    $('#gicAvatar').textContent = (conv.display_name || conv.name || conv.id)[0];
+  }
+  // 全部群标签
+  const tags = parseGroupTags(conv.group_tags);
+  $('#gicTags').innerHTML = tags.map(t => `<span class="gic-tag">${escHtml(t)}</span>`).join('');
+  $('#gicTags').style.display = tags.length ? '' : 'none';
+  // 群简介 / 群分类
+  const memo = conv.group_memo || '';
+  const memoEl = $('#gicMemo');
+  const memoTrunc = memo.length > 20;  // 超过 20 字截断，点击弹窗看完整内容
+  memoEl.textContent = memoTrunc ? memo.slice(0, 20) + '……' : (memo || '暂无简介');
+  memoEl.classList.toggle('memo-trunc', memoTrunc);
+  memoEl.dataset.full = memo;
+  $('#gicClass').textContent = conv.group_class || '暂无分类';
+}
+
+// 点击截断的群简介 → 二次弹窗显示完整内容
+$('#gicMemo').addEventListener('click', () => {
+  const memoEl = $('#gicMemo');
+  if (!memoEl.classList.contains('memo-trunc')) return;  // 未截断（内容已完整显示）不弹窗
+  $('#memoFull').textContent = memoEl.dataset.full || '';
+  $('#memoModal').classList.add('show');
+});
+$('#btnCloseMemo').addEventListener('click', () => $('#memoModal').classList.remove('show'));
+$('#memoModal').addEventListener('click', (e) => { if (e.target === $('#memoModal')) $('#memoModal').classList.remove('show'); });
+
+function hideGroupInfoCard() {
+  $groupInfoCard.style.display = 'none';
+  $chatName.classList.remove('card-open');
+}
+
+function toggleGroupInfoCard() {
+  const conv = findConvAnywhere(currentConv);
+  if (!conv || conv.type !== 'group') return;  // 仅群聊可弹
+  if ($groupInfoCard.style.display !== 'none') { hideGroupInfoCard(); return; }
+  renderGroupInfoCard(conv);
+  $groupInfoCard.style.display = 'block';
+  $chatName.classList.add('card-open');
+  // 数据不全则补拉一次（缓存命中则不重复请求）
+  if (!conv.group_memo && !conv.group_class && !parseGroupTags(conv.group_tags).length) {
+    API(`/api/group-info/${encodeURIComponent(currentConv)}`).then(r => {
+      if (r && r.ok) {
+        conv.group_memo = r.memo || '';
+        conv.group_class = r.class_text || '';
+        conv.group_tags = r.tags || [];
+        renderGroupInfoCard(conv);
+      }
+    }).catch(() => {});
+  }
+}
+
+$chatNameInner.addEventListener('click', toggleGroupInfoCard);
+document.addEventListener('click', (e) => {
+  if ($groupInfoCard.style.display === 'none') return;
+  // 点击群名文本或卡片内部不关闭（外层空白区不算）
+  if ($chatNameInner.contains(e.target) || $groupInfoCard.contains(e.target)) return;
+  hideGroupInfoCard();
+});
+
 function applyChatHeaderAvatar() {
   const conv = findConvAnywhere(currentConv);
   if (!conv) return;
   if (conv.avatar_url) {
     $chatAvatar.innerHTML = `<img src="${escHtml(conv.avatar_url)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">`;
   } else {
-    $chatAvatar.textContent = (conv.name || conv.id)[0];
+    $chatAvatar.textContent = (conv.display_name || conv.name || conv.id)[0];
   }
 }
 
 async function selectConv(convId, targetMsgId = 0) {
   currentConv = convId;
+  hideGroupInfoCard();
+  hideMemberCard();  // 切换会话关闭成员卡片
   const convNow = findConvAnywhere(convId);
   currentConvType = convNow && convNow.type ? convNow.type : 'group';
+  // 加群申请入口：仅机器人是当前群管理员/群主时显示；红点按当前群计数刷新
+  updateJoinReqBtnVisibility();
+  refreshJoinReqBadge();
+  // 私聊标题无悬停/点击高亮（仅群聊可点开信息卡片）
+  $chatName.classList.toggle('is-dm', !(convNow && convNow.type === 'group'));
+  // 禁言状态 1s 轮询：仅群聊轮询，切换会话即停
+  stopMutePolling();
+  stopJoinReqPolling();
+  if (convNow && convNow.type === 'group') {
+    startMutePolling(convId);
+    startJoinReqPolling();
+  }
   // 进入动画：主页看板向上收，聊天区向下展开
   if ($chatEmpty.style.display !== 'none') transitionChat($chatEmpty, $messages);
   else $messages.style.display = 'flex';
@@ -412,8 +552,10 @@ async function selectConv(convId, targetMsgId = 0) {
   // 会话信息
   const conv = findConvAnywhere(convId);
   if (conv) {
-    $chatName.textContent = conv.name || conv.id;
+    $chatNameInner.textContent = fmtConvTitle(conv);
     applyChatHeaderAvatar();
+    // 收消息权限提示（群聊且有值时显示，私聊/未知隐藏）
+    updateRecvBanner(conv);
     // 立即清除未读（不等 API）和 @ 标记
     conv.unread_count = 0;
     conv.at = false;
@@ -427,6 +569,46 @@ async function selectConv(convId, targetMsgId = 0) {
         conv.hidden = 0;
         renderConvList($searchInput.value);
       });
+    }
+    // 群聊：拉取官方群名/人数（后端 24h 缓存，备注优先于官方名）
+    // 响应回来时用户可能已切到别的会话：currentConv 不一致则丢弃，防止旧会话的标题/徽章盖掉当前会话
+    if (conv.type === 'group') {
+      API(`/api/group-info/${encodeURIComponent(convId)}`).then(r => {
+        if (r && r.ok && currentConv === convId) {
+          conv.official_name = r.official_name || '';
+          conv.member_num = r.member_num || 0;
+          conv.group_memo = r.memo || '';
+          conv.group_class = r.class_text || '';
+          conv.group_tags = r.tags || [];
+          conv.bot_role = r.bot_role || '';
+          // group-info 有 6h 缓存，只信真实值（0/1），-1 未知不覆盖；列表里的新值优先
+          if (r.proactive_msg === 0 || r.proactive_msg === 1) conv.proactive_msg = r.proactive_msg;
+          if (r.recv_setting) conv.recv_setting = r.recv_setting;
+          if (r.display_name) conv.display_name = r.display_name;
+          $chatNameInner.textContent = fmtConvTitle(conv);
+          renderConvList($searchInput.value);
+          // 机器人身份已获取：回填已渲染消息的身份徽章
+          applyBotRoleBadge(conv.bot_role);
+          // 机器人身份已获取：按身份刷新加群申请入口显隐
+          updateJoinReqBtnVisibility();
+          // 收消息设置已获取：更新顶栏下方常驻提示
+          updateRecvBanner(conv);
+          // 卡片已打开则刷新内容
+          if ($groupInfoCard.style.display !== 'none') renderGroupInfoCard(conv);
+        }
+      }).catch(() => {});
+    }
+    // 私聊：进入页面刷新一次个人头像（失败静默保留旧头像；已切走则不更新界面）
+    if (conv.type === 'direct') {
+      API(`/api/avatar/${encodeURIComponent(convId)}`).then(r => {
+        if (r && r.ok && r.avatar && currentConv === convId) {
+          conv.avatar_url = r.avatar;
+          applyChatHeaderAvatar();
+          renderConvList($searchInput.value);
+          // 更新已渲染的对方消息头像（.in 行；自己发的用 bot 头像不受影响）
+          document.querySelectorAll('#messages .msg-row.in .msg-avatar-col img.msg-avatar-img').forEach(img => { img.src = r.avatar; });
+        }
+      }).catch(() => {});
     }
     renderConvList($searchInput.value);
   }
@@ -451,7 +633,9 @@ async function selectConv(convId, targetMsgId = 0) {
     // 滚动到底部
     // 手机端：显示聊天区，隐藏侧栏
     if (window.innerWidth <= 768) {
-      document.getElementById('chatArea').classList.add('mobile-open');
+      const ca = document.getElementById('chatArea');
+      ca.classList.add('mobile-open');
+      ca.classList.remove('home-mode');  // 离开主页模式（聊天视图全屏盖侧栏）
       document.querySelectorAll('.sidebar, .side-rail').forEach(el => el.style.display = 'none');
     }
     scrollBottom();
@@ -478,20 +662,26 @@ $searchInput.addEventListener('input', () => {
 function handleRecallMessage(data) {
   const el = document.querySelector(`.msg-row[data-msg-id="${data.id}"]`);
   if (el) {
-    const noReedit2 = ['[图片]','[视频]','[语音]','[文件]','[卡片消息]','[键盘]'].some(p => (data.content || '').startsWith(p)) || (data.msg_type == 8);
-    el.innerHTML = `<div class="msg-bubble">你撤回了一条消息${noReedit2 ? '' : ` <span class="reedit-link" onclick="reeditMessageContent('${encodeURIComponent(data.content || '')}', ${data.msg_type || 0}, '${data.quoted_ref_idx || ''}', '${(data.quoted_sender || '').replace(/'/g, "\\'")}', '${(data.quoted_content || '').replace(/'/g, "\\'")}')">重新编辑</span>`}</div>`;
+    // 撤回自己的消息显示「你撤回了一条消息」+ 重新编辑；撤回别人的显示「你撤回了成员 XXX 的一条消息」
+    const isOwn = data.direction === 'outgoing';
+    const noReedit2 = !isOwn || ['[图片]','[视频]','[语音]','[文件]','[卡片消息]','[键盘]'].some(p => (data.content || '').startsWith(p)) || (data.msg_type == 8);
+    const recallTip = isOwn ? '你撤回了一条消息'
+      : `你撤回了成员<span class="mute-member-name">${escHtml(data.sender_name || '')}</span>的一条消息`;
+    el.innerHTML = `<div class="msg-bubble">${recallTip}${noReedit2 ? '' : ` <span class="reedit-link" onclick="reeditMessageContent('${encodeURIComponent(data.content || '')}', ${data.msg_type || 0}, '${data.quoted_ref_idx || ''}', '${(data.quoted_sender || '').replace(/'/g, "\\'")}', '${(data.quoted_content || '').replace(/'/g, "\\'")}')">重新编辑</span>`}</div>`;
     el.classList.add('center');
     el.classList.remove('in', 'out');
     el.removeEventListener('contextmenu', onMsgContextMenu);
   }
-  // 更新会话预览
-  const conv = conversations.find(c => c.id === data.conversation_id);
-  if (conv) {
-    conv.last_message = '你撤回了一条消息';
-    conv.last_sender = '';
-    conv.last_direction = '';
+  // 会话预览：用后端算好的最新预览即时更新（最新未撤回消息，或撤回提示），避免固定文案/跳变
+  if (data.preview) {
+    const conv = conversations.find(c => c.id === data.conversation_id);
+    if (conv) {
+      conv.last_message = data.preview.last_message;
+      conv.last_sender = data.preview.last_sender;
+      conv.last_direction = data.preview.last_direction;
+      renderConvList($searchInput.value);
+    }
   }
-  renderConvList($searchInput.value);
 }
 
 function scrollToQuoted(refIdx) {
@@ -565,14 +755,20 @@ async function refreshConversations(silent = false) {
     });
     conversations = newList;
     renderConvList($searchInput.value);
+    // 会话列表刷新（含 bot_role 变化）→ 同步按钮显隐与红点计数
+    updateJoinReqBtnVisibility();
+    refreshJoinReqBadge();
 
     // 如果打开了会话，增量拉取新消息
     if (currentConv && lastMsgId > 0) {
       const msgData = await API(`/api/messages/${currentConv}?limit=50`);
       const msgs = msgData.messages || [];
-      // 只追加 lastMsgId 之后的新消息
+      // 只追加 lastMsgId 之后的新消息（已渲染过的 id 跳过，防止本地气泡与库中消息双重回显）
       const newMsgs = msgs.filter(m => m.id > lastMsgId);
-      newMsgs.forEach(m => appendMessage(m, true));
+      newMsgs.forEach(m => {
+        if (m.id && document.querySelector(`.msg-row[data-msg-id="${m.id}"]`)) return;
+        appendMessage(m, true);
+      });
       if (newMsgs.length > 0) {
         lastMsgId = newMsgs[newMsgs.length - 1].id;
         if (!silent) scrollBottom();
@@ -599,6 +795,8 @@ async function init() {
   applyBotAvatar();
   // 渲染简介
   renderBio();
+  // 加群申请徽章（红点数量）
+  refreshJoinReqBadge();
 
   connectWS();
   await refreshConversations(false);
@@ -610,3 +808,190 @@ async function init() {
   } catch (e) {}
 }
 // ⚠️ init() 调用在 settings.js 末尾执行——它依赖 settings.js 中的函数，须等全部文件加载完（这里不能再调用！）
+
+// ── 加群申请：查看 + 手动审批 ─────────────────────────
+// 进入群聊后每 1s 轮询一次（与禁言一致）：刷新红点计数；弹窗开着时顺带刷列表。
+// 后端有 2s 缓存兜底（QQ API 30 QPM），轮询本身只打本地内存 summary 接口。
+let joinReqPollTimer = null;
+
+function stopJoinReqPolling() {
+  if (joinReqPollTimer) { clearInterval(joinReqPollTimer); joinReqPollTimer = null; }
+}
+
+async function joinReqPollTick() {
+  refreshJoinReqBadge();
+  // 弹窗开着且是当前群 → 刷新列表
+  if ($('#joinRequestModal').classList.contains('show')) loadJoinRequests();
+}
+
+function startJoinReqPolling() {
+  stopJoinReqPolling();
+  joinReqPollTick();
+  joinReqPollTimer = setInterval(joinReqPollTick, 1000);
+}
+
+function fmtRFC3339(ts) {
+  // "2026-08-13T12:34:56+08:00" → "08-13 12:34"（本地时区）
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return String(ts).substring(0, 16);
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function updateJoinReqBtnVisibility() {
+  // 机器人不是当前群管理员/群主（或私聊）→ 隐藏加群申请入口
+  const btn = $('#btnJoinRequests');
+  if (!btn) return;
+  let show = false;
+  if (currentConvType === 'group') {
+    const conv = findConvAnywhere(currentConv);
+    const role = conv && conv.bot_role;
+    if (['admin', 'owner'].includes(role)) show = true;
+  }
+  btn.style.display = show ? '' : 'none';
+}
+
+function openJoinRequestModal() {
+  const conv = findConvAnywhere(currentConv);
+  $('#joinRequestGroupName').textContent = conv ? ` · ${conv.display_name || conv.name || conv.id}` : '';
+  $('#joinRequestModal').classList.add('show');
+  loadJoinRequests();
+}
+
+function closeJoinRequestModal() {
+  $('#joinRequestModal').classList.remove('show');
+}
+
+$('#btnJoinRequests').addEventListener('click', () => {
+  if (currentConvType !== 'group') {
+    showToast('私聊没有加群申请');
+    return;
+  }
+  const conv = findConvAnywhere(currentConv);
+  if (conv && conv.bot_role && !['admin', 'owner'].includes(conv.bot_role)) {
+    showToast('机器人不是群管理员，无法查看');
+    return;
+  }
+  openJoinRequestModal();
+});
+
+$('#btnCloseJoinRequest').addEventListener('click', closeJoinRequestModal);
+$('#joinRequestModal').addEventListener('click', (e) => {
+  if (e.target === $('#joinRequestModal')) closeJoinRequestModal();
+});
+
+async function loadJoinRequests() {
+  if (!currentConv || currentConvType !== 'group') return;
+  if (!$('#joinRequestModal').classList.contains('show')) return;
+  try {
+    const data = await API('/api/join-requests/' + encodeURIComponent(currentConv));
+    if (!data.ok) { showToast(data.error || '获取加群申请失败'); return; }
+    renderJoinRequests(data.requests || []);
+  } catch (e) {
+    showToast('获取加群申请失败');
+  }
+}
+
+function renderJoinRequests(reqs) {
+  const box = $('#joinRequestList');
+  if (!reqs.length) {
+    box.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:24px;">暂无待审批的加群申请</div>';
+    return;
+  }
+  box.innerHTML = reqs.map((r, i) => {
+    const name = escHtml(r.username || '未知成员');
+    const openid = escHtml(r.member_openid || '');
+    const time = fmtRFC3339(r.apply_at);
+    const source = r.apply_source === 'invited' ? '被邀请' : '主动申请';
+    const risk = r.risk_tips ? `<div class="join-risk">⚠ ${escHtml(r.risk_tips)}</div>` : '';
+    const verifyMsg = (r.verify_info && r.verify_info.verify_message)
+      ? `<div class="join-verify">验证消息：${escHtml(r.verify_info.verify_message)}</div>` : '';
+    // 头像：后端已用 PatchUserInfo.getUserAvatar 下载转 base64 data URL；失败回退首字符
+    const avatar = r.avatar
+      ? `<img class="jr-avatar" src="${escHtml(r.avatar)}" alt="">`
+      : `<div class="jr-avatar">${escHtml((r.username || '?')[0])}</div>`;
+    return `
+      <div class="join-request-item" data-i="${i}">
+        ${avatar}
+        <div class="jr-info">
+          <div class="jr-name">${name}${risk}</div>
+          <div class="jr-sub">OpenID: ${openid}</div>
+          <div class="jr-sub">${time} · ${source}</div>
+          ${verifyMsg}
+        </div>
+        <div class="jr-actions">
+          <button class="glass-btn active jr-approve">同意</button>
+          <button class="glass-btn danger jr-decline">拒绝</button>
+        </div>
+      </div>`;
+  }).join('');
+  box.querySelectorAll('.join-request-item').forEach(item => {
+    const r = reqs[+item.dataset.i];
+    item.querySelector('.jr-approve').onclick = () => approveJoinRequest(r, 'approve');
+    item.querySelector('.jr-decline').onclick = () => approveJoinRequest(r, 'decline');
+  });
+}
+
+async function approveJoinRequest(r, op) {
+  const name = r.username || r.member_openid || '该成员';
+  let confirmed, rejectReason = '';
+  if (op === 'approve') {
+    confirmed = await showConfirm(`同意「${name}」加入该群？`, 'ok', false, true);
+  } else {
+    // 拒绝：可填写原因（可选），第三按钮「拒绝并拉黑」
+    const res = await showConfirm(`确定拒绝「${name}」的加群申请？`, 'warning', true, true, '拒绝并拉黑', '', '', '拒绝原因（可选）');
+    if (!res) return;
+    confirmed = res.action === 'third' ? 'third' : true;
+    rejectReason = (res.reason || '').trim();
+  }
+  if (!confirmed) return;
+  try {
+    const data = await fetch('/api/join-request/approval', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conv_id: currentConv,
+        member_openid: r.member_openid,
+        join_request_id: r.join_request_id,
+        op,
+        username: r.username || '',
+        reject_reason: rejectReason,
+        add_to_blacklist: confirmed === 'third',
+      }),
+    }).then(r => r.json());
+    if (!data.ok) { showToast(data.error || '审批失败'); return; }
+    showToast(op === 'approve'
+      ? '✅ 已同意加入'
+      : `✅ 已拒绝加入${confirmed === 'third' ? '，并已拉黑' : ''}`);
+    loadJoinRequests();
+    refreshJoinReqBadge();
+  } catch (e) {
+    showToast('审批请求失败');
+  }
+}
+
+async function refreshJoinReqBadge() {
+  // 红点显示「当前会话所在群」的待审批申请数：切换群时数量随之刷新（弹窗也只列当前群）
+  try {
+    const data = await API('/api/join-requests/summary');
+    if (!data.ok) return;
+    const badge = $('#btnJoinReqBadge');
+    if (!badge) return;
+    const count = currentConv ? ((data.per_group || {})[currentConv] || 0) : 0;
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch (e) { /* 静默失败，下次事件/轮询再刷新 */ }
+}
+
+function handleJoinRequestPush(d) {
+  // 静默：不做 toast（打扰），只刷红点徽章；弹窗开着且是当前群 → 直接刷新列表
+  refreshJoinReqBadge();
+  if (d && currentConv === d.group_openid && $('#joinRequestModal').classList.contains('show')) {
+    loadJoinRequests();
+  }
+}

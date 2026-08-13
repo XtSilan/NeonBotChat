@@ -36,6 +36,10 @@ def is_echo(conv_id: str, content: str) -> bool:
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "neonbot.db")
 
+# ── 群基本信息（/v2/groups/{id}/info）缓存时长 ───────────
+# 超过该时长视为过期：后台定时任务（30 分钟一轮）与前端按需拉取都会刷新
+GROUP_INFO_TTL = 6 * 3600  # 6 小时（API 限频 30 QPM）
+
 
 def get_db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
@@ -89,17 +93,36 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_msg_conv  ON messages(conversation_id, timestamp);
         CREATE INDEX IF NOT EXISTS idx_conv_time ON conversations(last_message_time DESC);
     """)
-    # 迁移：旧库补 pinned / muted / hidden 列
+    # 迁移：旧库补新列
     cols = {r[1] for r in conn.execute("PRAGMA table_info(conversations)").fetchall()}
     for col, ddl in (
         ("pinned", "ALTER TABLE conversations ADD COLUMN pinned INTEGER DEFAULT 0"),
         ("muted",  "ALTER TABLE conversations ADD COLUMN muted INTEGER DEFAULT 0"),
         ("hidden", "ALTER TABLE conversations ADD COLUMN hidden INTEGER DEFAULT 0"),
+        # 群信息（QQ API /v2/groups/{id}/info 获取，TTL 缓存）
+        ("user_note",       "ALTER TABLE conversations ADD COLUMN user_note TEXT DEFAULT ''"),
+        ("official_name",   "ALTER TABLE conversations ADD COLUMN official_name TEXT DEFAULT ''"),
+        ("member_num",      "ALTER TABLE conversations ADD COLUMN member_num INTEGER DEFAULT 0"),
+        ("group_memo",      "ALTER TABLE conversations ADD COLUMN group_memo TEXT DEFAULT ''"),
+        ("group_class",     "ALTER TABLE conversations ADD COLUMN group_class TEXT DEFAULT ''"),
+        ("group_tags",      "ALTER TABLE conversations ADD COLUMN group_tags TEXT DEFAULT '[]'"),
+        # 机器人在群内身份（QQ API /v2/groups/{id}/bot_state 获取：member/owner/admin）
+        ("bot_role",        "ALTER TABLE conversations ADD COLUMN bot_role TEXT DEFAULT ''"),
+        # 机器人主动消息权限（allow_proactive_msg：1/0，-1=尚未获取）+ 收消息设置（recv_msg_setting：all/only_mention/mention_and_context）
+        ("proactive_msg",   "ALTER TABLE conversations ADD COLUMN proactive_msg INTEGER DEFAULT -1"),
+        ("recv_setting",    "ALTER TABLE conversations ADD COLUMN recv_setting TEXT DEFAULT ''"),
+        ("info_updated_at", "ALTER TABLE conversations ADD COLUMN info_updated_at REAL DEFAULT 0"),
     ):
         if col not in cols:
             conn.execute(ddl)
     conn.commit()
     conn.close()
+
+
+def conv_display_name(row: dict) -> str:
+    """显示名优先级：用户备注 > QQ 官方群名 > 旧名 > 默认名"""
+    return (row.get("user_note") or row.get("official_name") or row.get("name")
+            or f"群聊 {str(row.get('id', ''))[:10]}")
 
 
 # ── 会话操作 ──────────────────────────────────────────────
@@ -131,13 +154,101 @@ async def upsert_conversation(
 
 
 async def rename_conversation(conv_id: str, name: str) -> None:
-    """强制重命名会话（用户手动设置备注）"""
+    """强制重命名会话（用户手动设置备注）。name 同时写 user_note，显示时备注优先于官方群名"""
     def _do():
         conn = get_db()
-        conn.execute("UPDATE conversations SET name = ? WHERE id = ?", (name, conv_id))
+        conn.execute("UPDATE conversations SET name = ?, user_note = ? WHERE id = ?", (name, name, conv_id))
         conn.commit()
         conn.close()
     await asyncio.to_thread(_do)
+
+
+async def set_group_info(
+    conv_id: str,
+    official_name: str,
+    member_num: int,
+    memo: str = "",
+    class_text: str = "",
+    tags: list = None,
+    bot_role: str = None,
+    proactive_msg: int = None,
+    recv_setting: str = None,
+) -> None:
+    """写入 QQ API 获取的群基本信息（群名/人数/简介/分类/标签/机器人身份），不覆盖用户备注和旧 name。
+    bot_role/proactive_msg/recv_setting 为 None 表示接口未取到，保持库中原值"""
+    import json as _json
+    if not isinstance(tags, list):
+        tags = []
+    tags_str = _json.dumps(tags, ensure_ascii=False)
+    def _do():
+        conn = get_db()
+        conn.execute(
+            """UPDATE conversations
+               SET official_name = ?, member_num = ?, group_memo = ?, group_class = ?,
+                   group_tags = ?, bot_role = COALESCE(?, bot_role),
+                   proactive_msg = COALESCE(?, proactive_msg),
+                   recv_setting = COALESCE(?, recv_setting),
+                   info_updated_at = ?
+               WHERE id = ?""",
+            (official_name or "", int(member_num or 0), memo or "", class_text or "",
+             tags_str, bot_role, proactive_msg, recv_setting, _time.time(), conv_id),
+        )
+        conn.commit()
+        conn.close()
+    await asyncio.to_thread(_do)
+
+
+async def set_bot_state(conv_id: str, state: dict) -> None:
+    """单独写入机器人在群内状态（bot_state：身份/主动消息权限/收消息设置），不碰群信息缓存时间"""
+    if not state:
+        return
+    role = (state.get("member_role") or "").strip()
+    proactive = int(bool(state.get("allow_proactive_msg")))
+    recv = (state.get("recv_msg_setting") or "").strip()
+    def _do():
+        conn = get_db()
+        conn.execute(
+            "UPDATE conversations SET bot_role = ?, proactive_msg = ?, recv_setting = ? WHERE id = ?",
+            (role, proactive, recv, conv_id),
+        )
+        conn.commit()
+        conn.close()
+    await asyncio.to_thread(_do)
+
+
+async def get_group_convs_stale(stale_after: float = 24 * 3600) -> list[dict]:
+    """返回群信息已过期（超过 stale_after 秒未更新）的群会话，用于后台定时刷新。
+    任一关键字段为空（从未成功获取 / 旧版本只存了部分字段）也视为不完整，每轮重试直到刷出完整数据"""
+    def _do():
+        conn = get_db()
+        rows = conn.execute("""
+            SELECT id, type, official_name, member_num, group_memo, info_updated_at
+            FROM conversations
+            WHERE type = 'group'
+              AND (info_updated_at < ?
+                   OR official_name = ''
+                   OR member_num = 0
+                   OR group_memo = ''
+                   OR bot_role = ''
+                   OR recv_setting = '')
+            ORDER BY info_updated_at ASC
+        """, (_time.time() - stale_after,)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    return await asyncio.to_thread(_do)
+
+
+async def get_admin_group_ids() -> list[str]:
+    """返回机器人为群管理员/群主的群会话 id（bot_role ∈ admin/owner），加群申请轮询用"""
+    def _do():
+        conn = get_db()
+        rows = conn.execute("""
+            SELECT id FROM conversations
+            WHERE type = 'group' AND bot_role IN ('admin', 'owner')
+        """).fetchall()
+        conn.close()
+        return [r["id"] for r in rows]
+    return await asyncio.to_thread(_do)
 
 
 async def delete_conversation(conv_id: str) -> None:
@@ -193,14 +304,20 @@ async def get_conversations(limit: int = 50, include_hidden: bool = False) -> li
         conn = get_db()
         rows = conn.execute("""
             SELECT id, name, type, avatar_url, last_message, last_sender, last_direction,
-                   unread_count, pinned, muted, hidden, datetime(last_message_time) as last_time
+                   unread_count, pinned, muted, hidden,
+                   user_note, official_name, member_num, group_memo, group_class, group_tags, bot_role,
+                   proactive_msg, recv_setting, info_updated_at,
+                   datetime(last_message_time) as last_time
             FROM conversations
             {where}
             ORDER BY pinned DESC, last_message_time DESC
             LIMIT ?
         """.format(where="" if include_hidden else "WHERE hidden = 0"), (limit,)).fetchall()
         conn.close()
-        return [dict(r) for r in rows]
+        convs = [dict(r) for r in rows]
+        for c in convs:
+            c["display_name"] = conv_display_name(c)
+        return convs
     return await asyncio.to_thread(_do)
 
 
@@ -230,7 +347,11 @@ async def get_conversation(conv_id: str) -> Optional[dict]:
         conn = get_db()
         row = conn.execute("SELECT * FROM conversations WHERE id = ?", (conv_id,)).fetchone()
         conn.close()
-        return dict(row) if row else None
+        if not row:
+            return None
+        d = dict(row)
+        d["display_name"] = conv_display_name(d)
+        return d
     return await asyncio.to_thread(_do)
 
 
@@ -318,8 +439,8 @@ async def search_messages(q: str, limit: int = 50, conv_id: str = "") -> list[di
     def _do():
         conn = get_db()
         sql = """
-            SELECT m.id, m.conversation_id, c.name AS conv_name, m.sender_name,
-                   m.sender_avatar, m.content, m.msg_type, m.direction, m.timestamp
+            SELECT m.id, m.conversation_id, c.name AS conv_name, c.user_note, c.official_name,
+                   m.sender_name, m.sender_avatar, m.content, m.msg_type, m.direction, m.timestamp
             FROM messages m LEFT JOIN conversations c ON c.id = m.conversation_id
             WHERE (m.content LIKE ? OR m.sender_name LIKE ? OR m.attachments LIKE ?) AND m.recalled = 0
         """
@@ -331,7 +452,12 @@ async def search_messages(q: str, limit: int = 50, conv_id: str = "") -> list[di
         args.append(limit)
         rows = conn.execute(sql, args).fetchall()
         conn.close()
-        return [dict(r) for r in rows]
+        results = []
+        for r in rows:
+            d = dict(r)
+            d["conv_name"] = conv_display_name(d)
+            results.append(d)
+        return results
     return await asyncio.to_thread(_do)
 
 
@@ -358,7 +484,8 @@ async def get_stats() -> dict:
             GROUP BY direction
         """).fetchall()
         top = conn.execute(f"""
-            SELECT c.name AS name, c.id AS conv_id, COUNT(*) AS cnt FROM messages m
+            SELECT c.name AS name, c.user_note, c.official_name, c.id AS conv_id, COUNT(*) AS cnt
+            FROM messages m
             LEFT JOIN conversations c ON c.id = m.conversation_id
             WHERE m.{WEEK}
             GROUP BY m.conversation_id
@@ -405,7 +532,7 @@ async def get_stats() -> dict:
             "today": stats,
             "total": total,
             "top_convs": [
-                {"name": r["name"] or r["conv_id"], "conv_id": r["conv_id"], "count": r["cnt"]}
+                {"name": conv_display_name(dict(r)) or r["conv_id"], "conv_id": r["conv_id"], "count": r["cnt"]}
                 for r in top
             ],
             "trend": [{"d": r["d"], "count": r["cnt"]} for r in trend],

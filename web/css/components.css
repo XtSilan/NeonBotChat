@@ -445,11 +445,10 @@ body.light #homeStats .stat-card {
 /* ── Bot Avatar Upload ──────────────────────── */
 .bot-avatar-upload {
   width: 56px; height: 56px; border-radius: 50%;
-  border: 2px dashed var(--border); cursor: pointer;
+  border: 2px dashed var(--border);  /* 头像只读展示（来自官方接口），无 hover/动画 */
   display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; transition: border-color 0.2s; overflow: hidden;
+  flex-shrink: 0; overflow: hidden;
 }
-.bot-avatar-upload:hover { border-color: var(--accent); }
 .conv-avatar-upload {
   width: 56px; height: 56px; border-radius: 50%;
   border: 2px dashed var(--border); cursor: pointer;
@@ -458,6 +457,10 @@ body.light #homeStats .stat-card {
   background: rgba(255,255,255,0.05);
 }
 .conv-avatar-upload:hover { border-color: var(--accent); }
+/* 个人头像：系统自动获取，去掉上传框样式，只保留头像展示 */
+.conv-avatar-upload.avatar-static {
+  cursor: default; border-style: solid; pointer-events: none;
+}
 
 /* ── Frosted Glass Button ───────────────────── */
 .glass-btn {
@@ -485,6 +488,7 @@ body.light #homeStats .stat-card {
 .theme-btn.active { background: var(--accent); color: #fff; }
 
 /* ── Settings Nav ────────────────────────────── */
+.settings-content { background: var(--bg); }  /* 设置右半边：实色，不用毛玻璃 */
 .settings-nav {
   width: 140px; flex-shrink: 0;
   background: rgba(30, 31, 35, 0.3);
@@ -503,8 +507,30 @@ body.light #homeStats .stat-card {
   color: var(--text); background: rgba(255,255,255,0.06);
   border-left-color: var(--accent);
 }
+/* 移动端：导航文字收起按钮（只留图标，让右侧内容区更宽；桌面端不显示） */
+.settings-nav-fold {
+  display: none;
+  margin: 0 10px 8px; padding: 0;
+  width: 32px; height: 32px;
+  border: none; background: none;
+  color: var(--text-dim); cursor: pointer; flex-shrink: 0;
+  align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.settings-nav-fold:hover { color: var(--text); }
 /* 关于页内容上下居中 */
 #tab-about { height: 100%; display: flex; flex-direction: column; justify-content: center; }
+@media (max-width: 768px) {
+  .settings-nav-fold { display: flex; }
+  /* 收起：导航只剩图标列（文字 font-size:0 隐藏），内容区自动变宽 */
+  .settings-nav.folded { width: 56px; }
+  .settings-nav.folded .settings-nav-item {
+    font-size: 0; padding: 10px 0;
+    display: flex; justify-content: center;
+  }
+}
+/* 添加好友或群聊弹窗：类型切换按钮组 */
+.add-conv-type { display: flex; gap: 8px; margin-bottom: 14px; }
 
 /* ── Context Menu ────────────────────────────── */
 .context-menu {
@@ -549,6 +575,56 @@ body.light #homeStats .stat-card {
   color: var(--text); outline: none; font-size: 0.95em; margin-bottom: 14px;
 }
 .modal-box input:focus { border-color: var(--accent); }
+/* 禁言提示气泡里的成员名：蓝色显示，纯文本不可点击 */
+.mute-member-name { color: var(--accent); cursor: pointer; }
+
+/* ── @提及列表（输入框上方悬浮，伪@纯文本填充） ── */
+.mention-list {
+  position: absolute; bottom: 100%; left: 20px;  /* 宽度由 JS 按输入框宽度设置 */
+  max-height: 240px; overflow-y: auto;
+  background: rgba(28, 29, 33, 0.92);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px; padding: 6px;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.3);
+  z-index: 80;
+}
+.mention-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+}
+.mention-item:hover { background: rgba(255, 255, 255, 0.08); }
+.mention-item .mi-avatar {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--accent);
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  font-size: 0.8em; font-weight: 600; flex-shrink: 0; overflow: hidden;
+}
+.mention-item .mi-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.mention-item .mi-name { font-size: 0.9em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 禁言时长滚轮选择器（滚轮滚动 / 触摸拖动 / 点击选择，无输入框） */
+.mute-wheels { display: flex; justify-content: center; gap: 10px; }
+.mute-wheel-col { display: flex; flex-direction: column; align-items: center; }
+.mute-wheel-label { font-size: 0.8em; color: var(--text-dim); margin-bottom: 6px; }
+.mute-wheel {
+  width: 64px; height: 105px; overflow: hidden; position: relative;
+  border-radius: 12px; background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border); cursor: ns-resize;
+  -webkit-user-select: none; user-select: none;
+  touch-action: none;  /* 阻止页面滚动，滚轮内部处理触摸 */
+}
+.mute-wheel .wheel-list { transition: transform 0.18s ease; }
+.mute-wheel .wheel-item {
+  height: 35px; line-height: 35px; text-align: center;
+  font-size: 1.02em; color: var(--text-dim);
+  transition: color 0.15s, font-size 0.15s;
+}
+.mute-wheel .wheel-item.active { color: var(--text); font-size: 1.3em; font-weight: 700; }
+/* 上下渐隐遮罩（中间高亮区） */
+.mute-wheel::before, .mute-wheel::after {
+  content: ''; position: absolute; left: 0; right: 0; height: 35px; pointer-events: none;
+}
+.mute-wheel::before { top: 0; background: linear-gradient(to bottom, rgba(20, 21, 25, 0.92), rgba(20, 21, 25, 0)); }
+.mute-wheel::after { bottom: 0; background: linear-gradient(to top, rgba(20, 21, 25, 0.92), rgba(20, 21, 25, 0)); }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 .modal-actions button {
   padding: 8px 18px; border-radius: var(--radius); border: none;
@@ -559,3 +635,123 @@ body.light #homeStats .stat-card {
 .modal-actions .btn-ok:hover { background: var(--accent-hover); }
 .modal-actions .btn-cancel:hover { background: #4a4b50; }
 
+/* ── 群信息卡片（点击聊天头群名弹出） ─────────────── */
+.group-info-card {
+  position: absolute; top: 100%; left: 20px; margin-top: 10px;
+  min-width: 340px; max-width: 460px; z-index: 60;
+  background: rgba(28, 29, 33, 0.88);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 16px; padding: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  color: var(--text);
+}
+.group-info-card .gic-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.group-info-card .gic-avatar {
+  width: 60px; height: 60px; border-radius: 50%; background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5em; font-weight: 700; overflow: hidden; flex-shrink: 0;
+}
+.group-info-card .gic-titles { flex: 1; min-width: 0; }
+.group-info-card .gic-name { font-size: 1.15em; font-weight: 700; word-break: break-all; line-height: 1.4; }
+.group-info-card .gic-id {
+  font-size: 0.85em; color: var(--text-dim); margin-top: 3px;
+  word-break: break-all;
+}
+.group-info-card .gic-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.group-info-card .gic-row {
+  display: flex; gap: 12px; align-items: baseline;
+  font-size: 0.95em; line-height: 1.6; margin-top: 10px;
+}
+.group-info-card .gic-label { color: var(--text-dim); flex-shrink: 0; }
+.group-info-card .gic-value { color: var(--text); word-break: break-all; margin-left: auto; text-align: right; }
+/* 群简介超长截断后可点击：悬停/点击高亮（与 header-name 同款中性背景） */
+.group-info-card .gic-value.memo-trunc {
+  cursor: pointer; padding: 2px 8px; margin: -2px -8px;
+  border-radius: 8px; transition: background 0.15s;
+}
+.group-info-card .gic-value.memo-trunc:hover { background: rgba(255, 255, 255, 0.09); }
+.group-info-card .gic-value.memo-trunc:active { background: rgba(255, 255, 255, 0.20); }
+.group-info-card .gic-tag {
+  font-size: 0.85em; padding: 4px 14px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+/* ── 成员信息卡片（点击头像/撤回蓝字弹出，fixed 跟随点击位置） ── */
+.member-card {
+  position: fixed; z-index: 200;
+  min-width: 220px; max-width: 300px;
+  background: rgba(28, 29, 33, 0.85);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 14px; padding: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  color: var(--text);
+}
+.member-card .mc-head { display: flex; align-items: center; gap: 12px; }
+.member-card .mc-avatar {
+  width: 48px; height: 48px; border-radius: 50%; background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3em; font-weight: 700; overflow: hidden; flex-shrink: 0;
+}
+.member-card .mc-titles { flex: 1; min-width: 0; }
+.member-card .mc-name { font-size: 1.05em; font-weight: 700; word-break: break-all; line-height: 1.4; }
+.member-card .mc-id {
+  font-size: 0.8em; color: var(--text-dim); margin-top: 3px;
+  word-break: break-all;
+}
+.member-card .mc-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+
+/* 背景高亮只画在文本内容上（外层 flex:1 撑布局，无点击无背景） */
+.header-name #chatNameInner {
+  padding: 3px 10px; margin: -3px 0; border-radius: 8px;
+  display: inline-block; transition: background 0.15s;
+  cursor: pointer;
+}
+/* 悬停：浅色背景 */
+.header-name #chatNameInner:hover { background: rgba(255, 255, 255, 0.09); }
+/* 卡片打开：更深一档的中性背景（无彩色），区别于悬停 */
+.header-name.card-open #chatNameInner { background: rgba(255, 255, 255, 0.20); }
+/* 私聊标题：无悬停/点击高亮（不弹卡片，仅群聊可点） */
+.header-name.is-dm #chatNameInner,
+.header-name.is-dm #chatNameInner:hover,
+.header-name.is-dm #chatNameInner:active { background: transparent !important; cursor: default; }
+
+
+/* ── 加群申请列表项 ───────────────────────────────── */
+.join-request-item {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.join-request-item:hover { background: rgba(255,255,255,0.08); }
+.jr-avatar {
+  width: 40px; height: 40px; min-width: 40px;
+  border-radius: 50%;
+  background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 1em;
+}
+.jr-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.jr-info { flex: 1; min-width: 0; }
+.jr-name { font-weight: 600; color: var(--text); font-size: 0.95em; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.jr-sub { font-size: 0.75em; color: var(--text-dim); margin-top: 2px; word-break: break-all; }
+.jr-verify { font-size: 0.78em; color: var(--text-dim); margin-top: 4px; background: rgba(255,255,255,0.05); border-radius: 6px; padding: 4px 8px; }
+.join-risk { font-size: 0.78em; color: var(--danger); }
+.jr-actions { display: flex; flex-direction: column; gap: 6px; }
+.jr-actions .glass-btn { padding: 5px 14px; font-size: 0.82em; }
+
+/* ── 加群申请按钮红点徽章 ─────────────────────────── */
+.join-badge {
+  position: absolute; top: -5px; right: -7px;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 8px;
+  background: var(--danger); color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 16px;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; user-select: none;
+  box-shadow: 0 0 0 2px var(--bg);
+}

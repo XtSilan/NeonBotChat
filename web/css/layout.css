@@ -120,7 +120,7 @@
   padding: 14px 20px; border-bottom: 1px solid var(--border);
   font-weight: 700; font-size: 1.05em;
   display: flex; align-items: center; gap: 10px;
-  position: relative; z-index: 1;
+  position: relative; z-index: 50;  /* 高层级：让下拉的群信息卡片盖住消息区 */
 }
 .chat-header.glass {
   background: rgba(30, 31, 35, 0.55);
@@ -128,6 +128,28 @@
   -webkit-backdrop-filter: blur(12px);
   border-bottom-color: rgba(255,255,255,0.08);
 }
+/* 顶栏下方常驻提示条：机器人未被授予接收全量消息权限（不自动关闭，毛玻璃琥珀，右侧可手动关闭） */
+.recv-warn-banner {
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+  background: rgba(255, 180, 50, 0.14);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 180, 50, 0.22);
+  color: #e8a13c;
+  font-size: 0.85em;
+  padding: 7px 36px 7px 16px;
+  text-align: center;
+  z-index: 40;
+}
+.recv-warn-banner .recv-warn-close {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: inherit; opacity: 0.7;
+  cursor: pointer; padding: 4px; border-radius: 6px;
+  display: flex; align-items: center;
+}
+.recv-warn-banner .recv-warn-close:hover { opacity: 1; background: rgba(0, 0, 0, 0.15); }
 .chat-header .avatar-small {
   width: 34px; height: 34px; border-radius: 50%;
   background: var(--accent); display: flex; align-items: center; justify-content: center;
@@ -255,6 +277,21 @@
     align-items: center; justify-content: center;
   }
   .chat-area.mobile-open .mobile-back-btn { display: flex; }
+  /* 主页模式（统计看板）：不盖住侧栏，从窄栏右侧开始；返回按钮隐藏 */
+  .chat-area.mobile-open.home-mode { left: 56px; }
+  .chat-area.mobile-open.home-mode .mobile-back-btn { display: none; }
+  /* 主页统计卡片：每页一列竖排 3 张，横向滑动翻页（清掉全局 2 列显式定义） */
+  .chat-area.mobile-open.home-mode #homeStats {
+    grid-template-columns: 78vw;
+    grid-template-rows: repeat(3, minmax(150px, 1fr));
+    grid-auto-flow: column;
+    grid-auto-columns: 78vw;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+  .chat-area.mobile-open.home-mode #homeStats::-webkit-scrollbar { display: none; }
+  .chat-area.mobile-open.home-mode #homeStats .stat-card { scroll-snap-align: start; }
 }
 @media (min-width: 769px) {
   .mobile-back-btn { display: none; }
