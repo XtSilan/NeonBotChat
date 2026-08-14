@@ -98,73 +98,83 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// ── 聊天区空白右键：清屏（仅清 DOM，不删记录）───────
+// ── 聊天区空白右键/长按：清屏（仅清 DOM，不删记录）───────
 const $clearCtxMenu = $('#clearCtxMenu');
 
+// 清屏菜单（PC 右键空白 + 移动端长按空白共用）
+function showClearCtxMenu(clientX, clientY) {
+  $ctxMenu.style.display = 'none';
+  $convCtxMenu.style.display = 'none';
+  $clearCtxMenu.style.display = 'block';
+  const menuH = $clearCtxMenu.offsetHeight || 60;
+  let top = clientY;
+  if (clientY + menuH > window.innerHeight) top = clientY - menuH;
+  $clearCtxMenu.style.left = Math.min(clientX, window.innerWidth - 140) + 'px';
+  $clearCtxMenu.style.top = Math.max(0, top) + 'px';
+}
+
+// 头像菜单（PC 右键头像 + 移动端长按头像共用）：弹「@TA」菜单；
+// 机器人是群管理且对方是普通成员时再加「禁言」
+function showAvatarCtxMenu(e, row) {
+  const conv = findConvAnywhere(currentConv);
+  const botRole = conv && conv.bot_role || '';
+  const memberRole = row.dataset.msgMemberRole || '';
+  const botIsAdmin = ['owner', 'admin', '群主', '管理员'].includes(botRole);
+  const memberIsNormal = !['owner', 'admin', '群主', '管理员'].includes(memberRole);
+  e.preventDefault();
+  // 条件不满足（私聊/自己/无 OpenID）：不弹任何菜单
+  if (!conv || conv.type !== 'group' || row.dataset.msgDirection === 'outgoing'
+      || !row.dataset.msgSenderOpenid) return;
+  // 复用消息菜单，仅显示「@TA」；管理且对方是普通成员时再加「禁言」
+  ctxTargetMsg = {
+    sender_openid: row.dataset.msgSenderOpenid || '',
+    sender_name: row.dataset.msgSender || '',
+    el: row,
+  };
+  ['ctxCopy', 'ctxForward', 'ctxFavorite', 'ctxQuote', 'ctxMultiSelect', 'ctxRecall', 'ctxDelete', 'ctxSep'].forEach(id => {
+    $('#' + id).style.display = 'none';
+  });
+  $('#ctxAt').style.display = '';  // @TA：纯文本填充输入框
+  if (botIsAdmin && memberIsNormal) {
+    // 禁言状态来自 1s 轮询缓存（mutedMembers），右键时同步判断，无网络等待
+    const muted = mutedMembers.has(row.dataset.msgSenderOpenid);
+    ctxTargetMsg.muted = muted;
+    $('#ctxMute').innerHTML = muted
+      ? '<img src="icons/unmute.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 解除禁言'
+      : '<img src="icons/mute.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 禁言';
+    $('#ctxMute').style.display = '';
+  } else {
+    $('#ctxMute').style.display = 'none';  // 对方是管理/群主：只弹 @TA
+  }
+  $convCtxMenu.style.display = 'none';
+  $clearCtxMenu.style.display = 'none';
+  $ctxMenu.style.display = 'block';
+  const menuH = $ctxMenu.offsetHeight || 120;
+  let top = e.clientY;
+  if (e.clientY + menuH > window.innerHeight) top = e.clientY - menuH;
+  $ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 160) + 'px';
+  $ctxMenu.style.top = Math.max(0, top) + 'px';
+}
+
 $messages.addEventListener('contextmenu', (e) => {
-  // 右键成员头像：弹「@TA」菜单；机器人是群管理且对方是普通成员时再加「禁言」
+  // 右键成员头像：艾特/禁言菜单
   const avatarCol = e.target.closest ? e.target.closest('.msg-avatar-col') : null;
   if (avatarCol) {
     const row = avatarCol.closest('.msg-row');
-    if (row) {
-      const conv = findConvAnywhere(currentConv);
-      const botRole = conv && conv.bot_role || '';
-      const memberRole = row.dataset.msgMemberRole || '';
-      const botIsAdmin = ['owner', 'admin', '群主', '管理员'].includes(botRole);
-      const memberIsNormal = !['owner', 'admin', '群主', '管理员'].includes(memberRole);
-      e.preventDefault();
-      // 条件不满足（私聊/自己/无 OpenID）：不弹任何菜单
-      if (!conv || conv.type !== 'group' || row.dataset.msgDirection === 'outgoing'
-          || !row.dataset.msgSenderOpenid) return;
-      // 复用消息菜单，仅显示「@TA」；管理且对方是普通成员时再加「禁言」
-      ctxTargetMsg = {
-        sender_openid: row.dataset.msgSenderOpenid || '',
-        sender_name: row.dataset.msgSender || '',
-        el: row,
-      };
-      ['ctxCopy', 'ctxForward', 'ctxFavorite', 'ctxQuote', 'ctxMultiSelect', 'ctxRecall', 'ctxDelete', 'ctxSep'].forEach(id => {
-        $('#' + id).style.display = 'none';
-      });
-      $('#ctxAt').style.display = '';  // @TA：纯文本填充输入框
-      if (botIsAdmin && memberIsNormal) {
-        // 禁言状态来自 1s 轮询缓存（mutedMembers），右键时同步判断，无网络等待
-        const muted = mutedMembers.has(row.dataset.msgSenderOpenid);
-        ctxTargetMsg.muted = muted;
-        $('#ctxMute').innerHTML = muted
-          ? '<img src="icons/unmute.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 解除禁言'
-          : '<img src="icons/mute.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 禁言';
-        $('#ctxMute').style.display = '';
-      } else {
-        $('#ctxMute').style.display = 'none';  // 对方是管理/群主：只弹 @TA
-      }
-      $convCtxMenu.style.display = 'none';
-      $clearCtxMenu.style.display = 'none';
-      $ctxMenu.style.display = 'block';
-      const menuH = $ctxMenu.offsetHeight || 120;
-      let top = e.clientY;
-      if (e.clientY + menuH > window.innerHeight) top = e.clientY - menuH;
-      $ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 160) + 'px';
-      $ctxMenu.style.top = Math.max(0, top) + 'px';
-      return;
-    }
+    if (row) showAvatarCtxMenu(e, row);
+    return;
   }
   // 气泡/媒体内容区由消息菜单处理，其余全部走清屏菜单
   const contentEl = e.target.closest ? e.target.closest('.msg-bubble, .img-placeholder, .msg-audio, .file-card') : null;
   if (contentEl) return;
   e.preventDefault();
-  $ctxMenu.style.display = 'none';
-  $convCtxMenu.style.display = 'none';
-  $clearCtxMenu.style.display = 'block';
-  const menuH = $clearCtxMenu.offsetHeight || 60;
-  let top = e.clientY;
-  if (e.clientY + menuH > window.innerHeight) top = e.clientY - menuH;
-  $clearCtxMenu.style.left = Math.min(e.clientX, window.innerWidth - 140) + 'px';
-  $clearCtxMenu.style.top = Math.max(0, top) + 'px';
+  showClearCtxMenu(e.clientX, e.clientY);
 });
 
 $('#ctxClearScreen').addEventListener('click', () => {
   $clearCtxMenu.style.display = 'none';
   $messages.innerHTML = '';
+  hideJumpBtn();  // 清屏后消息区归零，按钮不再有意义
   showToast('✓ 已清屏');
 });
 
@@ -184,11 +194,25 @@ $messages.addEventListener('touchstart', (e) => {
   longPressTimer = setTimeout(() => {
     longPressFired = true;
     longPressTimer = null;
-    const row = longPressTarget && longPressTarget.closest ? longPressTarget.closest('.msg-row') : null;
-    if (!row) return;
-    // 模拟右键事件触发消息菜单
-    const ev = { clientX: longPressX, clientY: longPressY, preventDefault: () => {}, target: row };
-    onMsgContextMenu.call(row, ev);
+    const t = longPressTarget;
+    // 长按头像 → 艾特/禁言菜单（与 PC 右键头像一致）
+    const avatarCol = t.closest ? t.closest('.msg-avatar-col') : null;
+    if (avatarCol) {
+      const row = avatarCol.closest('.msg-row');
+      if (row) showAvatarCtxMenu({ clientX: longPressX, clientY: longPressY, preventDefault: () => {} }, row);
+      return;
+    }
+    const row = t.closest ? t.closest('.msg-row') : null;
+    if (!row) { showClearCtxMenu(longPressX, longPressY); return; }  // 消息区空白 → 清屏菜单
+    // 气泡/媒体 → 消息菜单；行内空白 → 清屏菜单（onMsgContextMenu 只管消息菜单，
+    // 清屏分支在外层 contextmenu handler 里，长按不经过它，需自行分流）
+    const contentEl = t.closest ? t.closest('.msg-bubble, .img-placeholder, .msg-audio, .file-card') : null;
+    if (contentEl) {
+      const ev = { clientX: longPressX, clientY: longPressY, preventDefault: () => {}, target: t };
+      onMsgContextMenu.call(row, ev);
+    } else {
+      showClearCtxMenu(longPressX, longPressY);
+    }
   }, 500);
 }, { passive: true });
 
@@ -217,7 +241,7 @@ $messages.addEventListener('click', (e) => {
 // ── 成员信息卡片（点击头像 / 撤回提示蓝字，在点击位置弹出） ──
 // isSelf=true（自己的消息）：头像用设置里配置的个性头像（getBotAvatar），
 // 消息记录本身没存 sender_avatar；未配置时才兜底 bot.svg 图标
-function showMemberCard(e, openid, name, avatar, isSelf) {
+function showMemberCard(e, openid, name, avatar, isSelf, anchored = false) {
   const card = $('#memberCard');
   if (!card || !openid) return;  // 无 OpenID（如禁言气泡）不弹
   card.dataset.self = isSelf ? '1' : '';
@@ -228,10 +252,22 @@ function showMemberCard(e, openid, name, avatar, isSelf) {
   } else {
     mcAvatarFallback();
   }
+  card.dataset.bot = (name && name.includes('🤖')) ? '1' : '';  // 机器人标记：刷新昵称时保留 bot.svg
   $('#mcName').innerHTML = fmtBotMarker(name || '未知成员');  // 🤖 → bot.svg 图标
   // 自己 → 显示设置的个性签名（bio）；他人 → 显示 OpenID
   $('#mcId').textContent = isSelf ? (getBio() || '未设置签名') : ('OpenID: ' + openid);
   card.style.display = 'block';
+  card.dataset.anchored = anchored ? '1' : '';
+  if (anchored) {
+    // 锚定模式：对齐群信息卡片的位置（群卡片是 absolute 相对 chat-area，
+    // 这里用 fixed 需把 chat-area 的视口偏移算进去）+ 顶栏用户名高亮
+    const ca = document.getElementById('chatArea').getBoundingClientRect();
+    card.style.left = (ca.left + 20) + 'px';
+    card.style.top = (ca.top + 66) + 'px';
+    $chatName.classList.add('card-open');
+    refreshMemberCard(openid, card, avEl);
+    return;
+  }
   // 定位在点击位置右侧下方，超出视口则翻转
   const r = card.getBoundingClientRect();
   let x = e.clientX + 12, y = e.clientY + 12;
@@ -239,6 +275,38 @@ function showMemberCard(e, openid, name, avatar, isSelf) {
   if (y + r.height > window.innerHeight - 8) y = Math.max(8, e.clientY - r.height - 12);
   card.style.left = x + 'px';
   card.style.top = y + 'px';
+  refreshMemberCard(openid, card, avEl);
+}
+
+// 弹出成员卡片后自动拉取该成员最新昵称/头像（后端 10 分钟缓存，不会频繁调第三方接口）；
+// 卡片仍开着才更新显示，失败静默保留旧值
+function refreshMemberCard(openid, card, avEl) {
+  if (card.dataset.self === '1') return;  // 机器人自己的头像走设置里的个性头像，不用 qlogo 拉取
+  API(`/api/user-info/${encodeURIComponent(openid)}`).then(r => {
+    if (!r || !r.ok || card.style.display === 'none') return;
+    if (r.name) {
+      const nm = card.dataset.bot === '1' ? r.name + ' 🤖' : r.name;  // 保留机器人标记，避免 bot.svg 消失
+      $('#mcName').innerHTML = fmtBotMarker(nm);
+    }
+    if (r.avatar_url) {
+      avEl.innerHTML = `<img src="${escHtml(r.avatar_url)}" alt="" onerror="this.onerror=null;mcAvatarFallback()" onclick="event.stopPropagation();viewImage('${escHtml(r.avatar_url)}')">`;
+      // 同步更新消息列表里该成员的头像与昵称（含 dataset，后续点卡片/右键用最新值）
+      const rows = document.querySelectorAll(`#messages .msg-row[data-msg-sender-openid="${CSS.escape(openid)}"]`);
+      rows.forEach(row => {
+        row.dataset.msgSenderAvatar = r.avatar_url;
+        const img = row.querySelector('.msg-avatar-img');
+        if (img) img.src = r.avatar_url;
+        if (r.name && row.dataset.msgDirection !== 'outgoing') {
+          // 原名字带 🤖（机器人标记）时给新昵称补回，避免重建 meta 后 bot.svg 图标消失
+          const oldName = row.dataset.msgSender || '';
+          const newName = oldName.includes('🤖') ? r.name + ' 🤖' : r.name;
+          row.dataset.msgSender = newName;
+          const meta = row.querySelector('.msg-meta');
+          if (meta) meta.outerHTML = msgMetaHtml('incoming', newName, row.dataset.msgMemberRole || '');
+        }
+      });
+    }
+  }).catch(() => {});
 }
 
 // 卡片头像兜底：自己且未配置个性头像 → bot.svg 图标；他人 → 昵称首字符
@@ -255,7 +323,11 @@ function mcAvatarFallback() {
 
 function hideMemberCard() {
   const card = $('#memberCard');
-  if (card) card.style.display = 'none';
+  if (card) {
+    card.style.display = 'none';
+    // 锚定模式打开的卡片关闭时，取消顶栏用户名高亮
+    if (card.dataset.anchored === '1') $chatName.classList.remove('card-open');
+  }
 }
 
 // 头像 / 撤回提示蓝字 → 弹成员卡片（stopPropagation 防止被 document 监听立即关闭）
@@ -263,14 +335,21 @@ $messages.addEventListener('click', (e) => {
   const row = e.target.closest('.msg-row');
   if (!row) return;
   const isSelf = row.dataset.msgDirection === 'outgoing';
+  // 私聊消息的 sender_name 是对方 OpenID、sender_avatar 为空——用会话显示名/头像兜底
+  let sName = row.dataset.msgSender, sAvatar = row.dataset.msgSenderAvatar;
+  if (currentConvType === 'direct' && !isSelf) {
+    const conv = conversations.find(c => c.id === currentConv);
+    sName = senderDisplayName(sName, currentConv);
+    if (!sAvatar) sAvatar = (conv && conv.avatar_url) || '';
+  }
   const blue = e.target.closest('.mute-member-name');
   if (blue) {
-    showMemberCard(e, row.dataset.msgSenderOpenid, row.dataset.msgSender, row.dataset.msgSenderAvatar, isSelf);
+    showMemberCard(e, row.dataset.msgSenderOpenid, sName, sAvatar, isSelf);
     e.stopPropagation();
     return;
   }
   if (e.target.closest('.msg-avatar-col')) {
-    showMemberCard(e, row.dataset.msgSenderOpenid, row.dataset.msgSender, row.dataset.msgSenderAvatar, isSelf);
+    showMemberCard(e, row.dataset.msgSenderOpenid, sName, sAvatar, isSelf);
     e.stopPropagation();
   }
 });
@@ -377,6 +456,17 @@ function getFavorites() {
 }
 function saveFavorites(favs) { localStorage.setItem('neonbot_fav', JSON.stringify(favs)); }
 
+// 单聊消息的 sender_name 存的是对方 OpenID（32 位十六进制串，旧版可能为纯数字）——显示时用会话名代替
+function looksLikeOpenId(s) {
+  return !!s && s.length >= 16 && /^[0-9a-fA-F-]+$/.test(s);
+}
+function senderDisplayName(raw, convId) {
+  const conv = conversations.find(c => c.id === convId);
+  const fallback = conv ? (conv.display_name || conv.name || conv.id) : '';
+  const name = (raw || '').trim();
+  return (!name || looksLikeOpenId(name)) ? (fallback || name) : name;
+}
+
 function renderFavList() {
   const favs = getFavorites();
   const $favList = $('#favList');
@@ -384,11 +474,18 @@ function renderFavList() {
     $favList.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px;">暂无收藏</div>';
     return;
   }
-  $favList.innerHTML = [...favs].reverse().map((f, i) => `
+  $favList.innerHTML = [...favs].reverse().map((f, i) => {
+    // 群消息：显示「来自 群名」，不显示成员身份徽章；私聊不显示来源（sender 已是对方昵称）
+    const favConv = conversations.find(c => c.id === f.conv_id);
+    const fromHtml = favConv && favConv.type !== 'direct'
+      ? ` · 来自 ${escHtml(favConv.display_name || favConv.name || favConv.id)}`
+      : '';
+    const favAvatar = f.avatar || (favConv && favConv.avatar_url) || '';
+    return `
     <div style="padding:8px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:8px;">
-      ${f.avatar ? `<img src="${escHtml(f.avatar)}" style="width:32px;height:32px;border-radius:50%;flex-shrink:0;margin-top:2px;" onerror="this.style.display='none'">` : ''}
+      ${favAvatar ? `<img src="${escHtml(favAvatar)}" style="width:32px;height:32px;border-radius:50%;flex-shrink:0;margin-top:2px;" onerror="this.style.display='none'">` : ''}
       <div style="min-width:0;flex:1;">
-        <div style="font-size:0.75em;color:var(--text-dim);">${escHtml(f.sender || '未知')}${roleBadge(f.member_role)} · ${escHtml(f.time || '')}</div>
+        <div style="font-size:0.75em;color:var(--text-dim);">${escHtml(senderDisplayName(f.sender, f.conv_id))}${fromHtml} · ${escHtml(f.time || '')}</div>
         ${(f.imgUrls || []).map(u => `<a href="${escHtml(u)}" target="_blank"><img src="${escHtml(u)}" style="max-width:100%;max-height:300px;border-radius:6px;display:block;margin:4px 0;cursor:pointer;" onerror="this.style.display='none'"></a>`).join('')}
         ${(f.videoUrls || []).map(u => `<video src="${escHtml(u)}" controls preload="metadata" style="max-width:100%;max-height:300px;border-radius:6px;display:block;margin:4px 0;" onerror="this.style.display='none'"></video>`).join('')}
         ${(f.audioUrls || []).map(u => `<audio src="${escHtml(u)}" controls preload="metadata" style="display:block;margin:4px 0;width:100%;min-width:200px;" onerror="this.style.display='none'"></audio>`).join('')}
@@ -397,7 +494,8 @@ function renderFavList() {
       </div>
       <button style="background:none;border:none;color:var(--danger);cursor:pointer;flex-shrink:0;" onclick="removeFav(${i})" title="取消收藏">✕</button>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function addFavorite(msg) {
@@ -408,8 +506,9 @@ function addFavorite(msg) {
     videoUrls: msg.videoUrls || [],
     audioUrls: msg.audioUrls || [],
     asrTexts: msg.asrTexts || [],
-    sender: msg.sender_name || '',
-    avatar: msg.sender_avatar || '',
+    sender: senderDisplayName(msg.sender_name, currentConv) || '',
+    // 私聊消息的 sender_avatar 通常为空——用会话头像兜底
+    avatar: msg.sender_avatar || (conversations.find(c => c.id === currentConv) || {}).avatar_url || '',
     member_role: msg.member_role || '',
     time: (msg.timestamp || '').substring(0, 16),
     conv_id: currentConv || '',
@@ -738,6 +837,10 @@ async function mutePollTick(convId) {
 
 function startMutePolling(convId) {
   stopMutePolling();
+  // 机器人不是群管理员时无禁言权限：不轮询（后端也会拦截，双保险，避免打爆 QQ API 30 QPM）
+  const conv = findConvAnywhere(convId);
+  const role = conv && conv.bot_role;
+  if (role && !['owner', 'admin', '群主', '管理员'].includes(role)) return;
   mutePollTick(convId);
   mutePollTimer = setInterval(() => mutePollTick(convId), 1000);
 }
@@ -766,12 +869,13 @@ $('#ctxMute').addEventListener('click', () => {
   // 该成员处于禁言中 → 直接解除
   if (ctxTargetMsg.muted) {
     const memberName = ctxTargetMsg.sender_name || '该成员';  // 先捕获，异步返回后可能被覆盖
+    const memberOid = ctxTargetMsg.sender_openid || '';
     API('/api/mute', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conv_id: currentConv, member_openid: ctxTargetMsg.sender_openid, op: 'del' }),
     }).then(r => {
-      if (r && r.ok) appendMuteBubble(memberName, '');  // 气泡即提示，不弹 toast
+      if (r && r.ok) appendMuteBubble(memberName, '', memberOid);  // 气泡即提示，不弹 toast
       else showToast('解除禁言失败：' + ((r && r.error) || '未知错误'));
     }).catch(err => showToast('解除禁言失败：' + err));
     return;
@@ -947,9 +1051,11 @@ function updateMuteTotal() {
 
 // 禁言/解除禁言成功后：消息底部追加一条居中气泡（类似「你撤回了一条消息」）
 // durationText 传空串时显示「XXX 被你解除禁言」；同时持久化到消息表，刷新后仍可见
-function appendMuteBubble(memberName, durationText) {
+function appendMuteBubble(memberName, durationText, openid) {
   const div = document.createElement('div');
   div.className = 'msg-row center';
+  div.dataset.msgSenderOpenid = openid || '';  // 点蓝字弹成员卡片需要 openid
+  div.dataset.msgSender = memberName || '';
   div.innerHTML = `<div class="msg-bubble"><span class="mute-member-name">${escHtml(memberName)}</span>被你${durationText ? `禁言${escHtml(durationText)}` : '解除禁言'}</div>`;
   $messages.appendChild(div);
   scrollBottom();
@@ -961,6 +1067,7 @@ function appendMuteBubble(memberName, durationText) {
     body: JSON.stringify({
       conv_id: currentConv,
       member_name: memberName,
+      sender_openid: openid || '',
       content: durationText ? `被你禁言${durationText}` : '被你解除禁言',
     }),
   }).then(r => {
@@ -977,6 +1084,7 @@ $('#btnOkMute').addEventListener('click', async () => {
   if (!ctxTargetMsg || !ctxTargetMsg.sender_openid) { showToast('无法获取成员标识'); return; }
   // 先捕获成员名/时长（异步返回后 ctxTargetMsg 可能已被下一次右键覆盖）
   const memberName = ctxTargetMsg.sender_name || '该成员';
+  const memberOid = ctxTargetMsg.sender_openid || '';
   const durationText = formatMuteDuration(total);
   // 立即关闭弹窗，避免等待网络请求造成卡顿感；结果只弹 toast
   $('#muteModal').classList.remove('show');
@@ -986,7 +1094,7 @@ $('#btnOkMute').addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conv_id: currentConv, member_openid: ctxTargetMsg.sender_openid, seconds: total }),
     });
-    if (r && r.ok) appendMuteBubble(memberName, durationText);  // 气泡即提示，不弹 toast
+    if (r && r.ok) appendMuteBubble(memberName, durationText, memberOid);  // 气泡即提示，不弹 toast
     else showToast('禁言失败：' + ((r && r.error) || '未知错误'));
   } catch (err) {
     showToast('禁言失败：' + err);

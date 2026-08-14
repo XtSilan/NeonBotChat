@@ -2,11 +2,11 @@
 .side-rail {
   width: 56px; flex-shrink: 0;
   position: relative; z-index: 5;  /* 盖在滑出动画中的主侧栏之上 */
-  background: color-mix(in srgb, var(--sidebar) 80%, transparent);
+  background: color-mix(in srgb, var(--sidebar) 50%, transparent);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   display: flex; flex-direction: column; align-items: center; justify-content: space-between;
-  border-right: 1px solid rgba(255,255,255,0.1);
+  border-right: 1px solid rgba(255,255,255,0.10);
   padding: 12px 0;
 }
 .rail-status {
@@ -53,7 +53,8 @@
 .sidebar-header .btn-add:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 .search-box {
   padding: 10px 16px; display: flex; align-items: center; gap: 8px;
-  background: rgba(0,0,0,0.25);
+  /* 嵌套在侧栏（自身有 blur）内，子级 blur 无效——只叠一层薄 tint，让侧栏的模糊透出 */
+  background: color-mix(in srgb, var(--sidebar) 30%, transparent);
 }
 .search-box input {
   flex: 1; min-width: 0; padding: 8px 12px; border-radius: var(--radius);
@@ -265,11 +266,87 @@
 .rich-type-btn.disabled { opacity: 0.4; cursor: not-allowed; }
 .rich-type-btn.disabled:hover { border-color: var(--border); background: transparent; }
 
+/* ── Mobile Top / Bottom Bars（桌面端隐藏） ───────── */
+.mobile-topbar, .mobile-bottombar { display: none; }
+/* 收藏/设置共用内容：移动端以真实页面显示；桌面端由 JS 移入弹窗壳（.modal-box）
+   平时隐藏，移入弹窗壳内时展开（移动端在媒体查询里用 .open 切换） */
+.mobile-page { display: none; }
+#settingsModalBox .mobile-page { display: flex; flex-direction: row; gap: 0; flex: 1; min-width: 0; }
+#favModalBox .mobile-page { display: block; }
+
 /* ── Responsive ───────────────────────────────── */
 @media (max-width: 768px) {
+  /* 移动端移除侧侧栏：导航职能由顶栏/底栏接管 */
+  .side-rail { display: none; }
+  /* 顶栏/底栏占位：页面内容（会话列表等）夹在中间 */
+  body { padding-top: 60px; padding-bottom: 56px; }
+
+  /* ── 移动端顶栏：bot 图标+BotChat / 头像+在线点+昵称+签名 ── */
+  .mobile-topbar {
+    display: flex; position: fixed; top: 0; left: 0; right: 0; height: 60px;
+    z-index: 40; align-items: center; justify-content: space-between;
+    padding: 0 14px;
+    background: color-mix(in srgb, var(--sidebar) 70%, transparent);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border-bottom: 1px solid var(--border);
+  }
+  .mt-logo { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .mt-logo img { width: 22px; height: 22px; }
+  .mt-logo span { font-size: 10px; line-height: 1; color: var(--text-dim); letter-spacing: 0.5px; user-select: none; }
+  .mt-profile {
+    display: flex; align-items: center; gap: 10px; min-width: 0;
+    background: none; border: none; padding: 0; cursor: pointer;
+    font-family: var(--font); -webkit-tap-highlight-color: transparent;
+  }
+  /* 外层包裹：在线点挂在它身上（圆形头像容器 overflow:hidden 会剪掉点，与侧栏同构） */
+  .mt-avatar-wrap { position: relative; width: 40px; height: 40px; flex-shrink: 0; }
+  .mt-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  .mt-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+  #mobileStatusDot {
+    position: absolute; bottom: 0; right: 0; width: 11px; height: 11px;
+    border-radius: 50%; background: var(--online);
+    border: 2px solid var(--sidebar); z-index: 2;
+  }
+  .mt-info { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; }
+  .mt-name { font-size: 1.08em; font-weight: 600; color: var(--text); max-width: 38vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mt-bio { font-size: 0.82em; color: var(--text-dim); max-width: 38vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── 移动端底栏：主页/消息/收藏/设置 四个页面 ── */
+  .mobile-bottombar {
+    display: flex; position: fixed; bottom: 0; left: 0; right: 0; height: 56px;
+    z-index: 40;
+    background: color-mix(in srgb, var(--sidebar) 70%, transparent);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border-top: 1px solid var(--border);
+  }
+  .mb-tab {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    background: none; border: none; padding: 0; cursor: pointer; color: var(--text-dim);
+    font-family: var(--font); -webkit-tap-highlight-color: transparent;
+  }
+  .mb-ic {
+    width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  .mb-ic img { width: 22px; height: 22px; }
+  .mb-label { font-size: 0.8em; line-height: 1; }
+  .mb-tab.active { color: var(--accent); }
+  .mb-tab.active .mb-ic { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+  .mb-tab:active { opacity: 0.7; }
+
   .sidebar { width: 100%; min-width: unset; }
   .chat-area { display: none; }
-  .chat-area.mobile-open { display: flex; position: fixed; inset: 0; z-index: 20; }
+  /* 进入会话：聊天区全屏盖住顶栏/底栏（返回按钮退出）；成员卡片 z-200 等仍在其上 */
+  .chat-area.mobile-open { display: flex; position: fixed; inset: 0; z-index: 45; }
+  /* 主页看板（主页页签）：夹在顶栏与底栏之间 */
+  .chat-area.mobile-open.home-mode { top: 60px; bottom: 56px; z-index: 20; }
   .mobile-back-btn {
     display: none; width: 32px; height: 32px; border-radius: 50%;
     border: none; background: rgba(255,255,255,0.08); color: var(--text);
@@ -277,8 +354,7 @@
     align-items: center; justify-content: center;
   }
   .chat-area.mobile-open .mobile-back-btn { display: flex; }
-  /* 主页模式（统计看板）：不盖住侧栏，从窄栏右侧开始；返回按钮隐藏 */
-  .chat-area.mobile-open.home-mode { left: 56px; }
+  /* 主页模式（统计看板）：侧栏已隐藏，看板通栏显示；返回按钮隐藏 */
   .chat-area.mobile-open.home-mode .mobile-back-btn { display: none; }
   /* 主页统计卡片：每页一列竖排 3 张，横向滑动翻页（清掉全局 2 列显式定义） */
   .chat-area.mobile-open.home-mode #homeStats {
@@ -292,6 +368,33 @@
   }
   .chat-area.mobile-open.home-mode #homeStats::-webkit-scrollbar { display: none; }
   .chat-area.mobile-open.home-mode #homeStats .stat-card { scroll-snap-align: start; }
+
+  /* ── 移动端：收藏/设置是真实页面（非弹窗），夹在顶栏/底栏之间，.open class 切换显示 ── */
+  .mobile-page {
+    position: fixed; top: 60px; bottom: 56px; left: 0; right: 0; z-index: 50;
+  }
+  .mobile-page.open { display: flex; }
+  /* 收藏页：整页毛玻璃（与弹窗基类同款半透明底 + blur），标题/列表/操作纵向排布，列表占满滚动 */
+  #pageFav {
+    flex-direction: column; padding: 16px;
+    background: rgba(30, 31, 35, 0.45);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  #pageFav h3 { flex-shrink: 0; margin: 0 0 12px; }
+  #pageFav #favList { flex: 1; min-height: 0; overflow-y: auto; }
+  #pageFav .modal-actions { flex-shrink: 0; margin-top: 12px; }
+  #btnCloseFav { display: none; }  /* 页面模式：页签切换即可关闭 */
+  /* 设置页：页面本身不加 blur——否则导航列/内容区的毛玻璃会失效（嵌套在已有 blur
+     父级里的 backdrop-filter 无效，见 components.css 说明）；毛玻璃由导航列 + 内容区各自提供 */
+  #pageSettings {
+    flex-direction: row; gap: 0;
+    background: rgba(30, 31, 35, 0.4);
+  }
+  /* 桌面弹窗壳移动端不用（内容住在真实页面里） */
+  #favModal, #settingsModal { display: none; }
+  /* 批量操作条上移，避免被底栏遮挡（body 前缀提特异性：components.css 的 bottom:20px 在后会反超） */
+  body .batch-bar { bottom: 76px; }
 }
 @media (min-width: 769px) {
   .mobile-back-btn { display: none; }

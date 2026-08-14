@@ -99,20 +99,58 @@ function renderCardMessageHtml(content) {
 // ── 群聊的聊天记录（合并转发）─────────────────────
 let chatRecordCache = [];
 
+// 转发消息文本里的富媒体附件（QQ 转发渲染格式：`[附件N] 类型:图片 文件名:... 尺寸:... 大小:... URL:...`）
+// 注意：纯富媒体转发消息没有 [消息内容] 行，只有 [发送者] + [附件N] 行
+function parseForwardAttachments(text) {
+  const out = [];
+  const re = /\[附件\d+\]\s*类型:(\S+)\s+文件名:([^\s]+)\s+尺寸:(\S+)\s+大小:(\S+)\s+URL:(\S+)/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const type = { '图片': 'image', '视频': 'video', '语音': 'audio', '文件': 'file' }[m[1]] || 'file';
+    out.push({ type, filename: m[2], size: m[3], url: m[5] });
+  }
+  return out;
+}
+
 function parseChatRecord(content) {
   if (!content || !content.startsWith('[群聊的聊天记录]')) return null;
   const msgs = [];
-  const re = /=== 消息 \d+ ===\s*\[消息内容\] ([\s\S]*?)\s*\[发送者\] ([^\n]+)/g;
-  let m;
-  while ((m = re.exec(content)) !== null) {
-    msgs.push({ content: m[1].trim(), sender: m[2].trim() });
+  const blocks = content.split(/=== 消息 \d+ ===/);
+  for (const b of blocks) {
+    // QQ 转发格式有空格变体：[发 送者]、[ 消息内容]
+    const senderM = b.match(/\[发\s*送者\]\s*([^\n]+)/);
+    if (!senderM) continue;
+    const sender = senderM[1].trim();
+    const contentM = b.match(/\[ *消息内容 *\]\s*([\s\S]*?)(?=\n\[附件\d+\]|\n\[发\s*送者\]|$)/);
+    const text = contentM ? contentM[1].trim() : '';
+    const atts = parseForwardAttachments(b);
+    const media = atts.filter(a => a.type === 'image' || a.type === 'video')
+      .map(a => ({ url: a.url, type: a.type }));
+    // 只有附件没有文本的消息：补占位文字（仅 [媒体类型]，文件名不展示；真实媒体由展开详情渲染）
+    const mediaOnly = !text && atts.length > 0;  // 纯媒体消息（无文本）：展开时不垫气泡、不显示占位文字
+    let displayText = text;
+    if (mediaOnly) {
+      const label = { 'image': '[图片]', 'video': '[视频]', 'audio': '[语音]', 'file': '[文件]' }[atts[0].type] || '[文件]';
+      displayText = atts.length > 1 ? `${label} ×${atts.length}` : label;
+    }
+    msgs.push({ content: displayText, sender, media, mediaOnly });
   }
   return msgs.length ? msgs : null;
 }
 
+function forwardMediaHtml(media, cls) {
+  if (!media || !media.length) return '';
+  return media.slice(0, 3).map(x => {
+    const src = isFileServerUrl(x.url) ? x.url : `/api/image?url=${encodeURIComponent(x.url)}`;
+    return x.type === 'image'
+      ? `<img src="${escHtml(src)}" class="${cls}" alt="">`
+      : `<video src="${escHtml(src)}" class="${cls}" muted></video>`;
+  }).join('');
+}
+
 function renderChatRecordCard(msgs) {
   chatRecordCache = msgs;
-  // 前 4 条预览：`发送者: 内容` 全灰色，单条最多 20 字符
+  // 前 4 条预览：`发送者: 内容` 全灰色，单条最多 20 字符；富媒体仅显示 [媒体类型]，不渲染
   const preview = msgs.slice(0, 4).map(m => {
     const line = `${m.sender}: ${m.content}`;
     const short = line.length > 20 ? line.slice(0, 20) + '...' : line;
@@ -127,13 +165,19 @@ function renderChatRecordCard(msgs) {
 }
 
 // 展开全部：气泡形式（无头像，统一左侧灰色，显示发送者昵称）
+// 纯媒体消息（mediaOnly）：不显示 [媒体类型] 占位、不垫气泡底，直接渲染真实媒体；图文混排/纯文本保留气泡
 function openChatRecord() {
   if (!chatRecordCache.length) return;
   $('#chatRecordList').innerHTML = chatRecordCache.map(m =>
-    `<div class="cr-bubble-row in">
-      <div class="cr-sender-name">${fmtBotMarker(escHtml(m.sender))}</div>
-      <div class="cr-bubble in">${escHtmlWithBr(m.content)}</div>
-    </div>`
+    m.mediaOnly
+      ? `<div class="cr-bubble-row in">
+          <div class="cr-sender-name">${fmtBotMarker(escHtml(m.sender))}</div>
+          <div class="cr-media-raw">${forwardMediaHtml(m.media, 'cr-bubble-media')}</div>
+        </div>`
+      : `<div class="cr-bubble-row in">
+          <div class="cr-sender-name">${fmtBotMarker(escHtml(m.sender))}</div>
+          <div class="cr-bubble in">${escHtmlWithBr(m.content)}${forwardMediaHtml(m.media, 'cr-bubble-media')}</div>
+        </div>`
   ).join('');
   $('#chatRecordModal').classList.add('show');
 }
@@ -270,7 +314,7 @@ function appendMessage(msg, scroll) {
     div.classList.add('center');
     div.innerHTML = `<div class="msg-bubble"><span class="mute-member-name">${escHtml(msg.sender_name || '')}</span>${escHtml(msg.content)}</div>`;
     $messages.appendChild(div);
-    if (scroll) scrollBottom();
+    if (scroll) autoScrollMsg(msg);
     return;
   }
 
@@ -285,7 +329,7 @@ function appendMessage(msg, scroll) {
       : `你撤回了成员<span class="mute-member-name">${escHtml(msg.sender_name || '')}</span>的一条消息`;
     div.innerHTML = `<div class="msg-bubble">${recallTip}${noReedit ? '' : ` <span class="reedit-link" onclick="reeditMessageContent('${encodeURIComponent(msg.content || '')}', ${msg.msg_type || 0}, '${msg.quoted_ref_idx || ''}', '${(msg.quoted_sender || '').replace(/'/g, "\\'")}', '${(msg.quoted_content || '').replace(/'/g, "\\'")}')">重新编辑</span>`}</div>`;
     $messages.appendChild(div);
-    if (scroll) scrollBottom();
+    if (scroll) autoScrollMsg(msg);
     return;
   }
 
@@ -321,8 +365,53 @@ function appendMessage(msg, scroll) {
 
   $messages.appendChild(div);
   preloadLinkCards();  // 触发新消息中的链接卡片预加载
-  if (scroll) scrollBottom();
+  if (scroll) autoScrollMsg(msg);
 }
+
+// 新消息到达：用户滚在底部附近才自动滚动到底；已向上翻阅则弹「↓ 跳转至最新消息」按钮，
+// 点击后再跳（自己发出的消息强制滚到底，保证发送反馈可见）
+function autoScrollMsg(msg) {
+  if (msg.direction === 'outgoing') { scrollBottom(); hideJumpBtn(); return; }
+  const atBottom = $messages.scrollHeight - $messages.scrollTop - $messages.clientHeight < 80;
+  if (atBottom) scrollBottom();
+  else showJumpBtn();
+}
+
+// ── 「跳至最新消息」悬浮按钮 ─────────────────────────
+let jumpNewCount = 0;
+function showJumpBtn() {
+  const btn = $('#jumpNewBtn');
+  if (!btn) return;
+  jumpNewCount++;
+  btn.textContent = `↓ 跳转至最新消息(${jumpNewCount}条)`;
+  btn.style.display = 'block';  // 先显示，定位时才能取到实际宽度
+  updateJumpBtnPos();
+}
+function hideJumpBtn() {
+  const btn = $('#jumpNewBtn');
+  if (btn) btn.style.display = 'none';
+  jumpNewCount = 0;
+}
+// 按钮悬浮在消息区底部、输入框正上方居中（absolute 相对 chatArea，坐标按输入框实时位置计算）
+function updateJumpBtnPos() {
+  const btn = $('#jumpNewBtn');
+  if (!btn || btn.style.display === 'none') return;
+  const ca = document.getElementById('chatArea');
+  const ia = document.getElementById('inputArea');
+  if (!ca || !ia) return;
+  const caR = ca.getBoundingClientRect(), iaR = ia.getBoundingClientRect();
+  const w = btn.offsetWidth || 160;  // 按钮实际宽度，按自身宽度精确居中
+  btn.style.left = ((iaR.left + iaR.width / 2 - caR.left) - w / 2) + 'px';  // 水平居中于输入框
+  btn.style.bottom = (caR.bottom - iaR.top + 12) + 'px';  // 贴输入框顶上方
+}
+$('#jumpNewBtn').addEventListener('click', () => { scrollBottom(); hideJumpBtn(); });
+// 用户滚回底部附近：按钮自动消失
+$messages.addEventListener('scroll', () => {
+  const btn = $('#jumpNewBtn');
+  if (!btn || btn.style.display === 'none') return;
+  if ($messages.scrollHeight - $messages.scrollTop - $messages.clientHeight < 80) hideJumpBtn();
+});
+window.addEventListener('resize', updateJumpBtnPos);
 
 // 点击查看大图
 // ── 发送消息 ────────────────────────────────────────
@@ -509,6 +598,7 @@ $msgInput.addEventListener('keydown', (e) => {
 $msgInput.addEventListener('input', () => {
   $msgInput.style.height = 'auto';
   $msgInput.style.height = Math.min($msgInput.scrollHeight, 120) + 'px';
+  updateJumpBtnPos();  // 输入框变高时按钮跟着上移
 });
 // ── @提及：输入 @ 弹出成员列表，继续打字检索；无匹配自动消失；点击纯文本填充 ──
 function collectConvUsers() {
@@ -524,6 +614,7 @@ function collectConvUsers() {
 function updateMentionList() {
   const list = $('#mentionList');
   if (!list) return;
+  if (currentConvType === 'direct') { list.style.display = 'none'; return; }  // 私聊不弹艾特面板
   const el = $msgInput;
   const selStart = el.selectionStart;
   const text = el.value;
@@ -538,8 +629,13 @@ function updateMentionList() {
       <div class="mi-avatar">${u.avatar ? `<img src="${escHtml(u.avatar)}" alt="">` : escHtml((u.name || '?')[0])}</div>
       <div class="mi-name">${escHtml(u.name)}</div>
     </div>`).join('');
-  // 列表宽度 = 输入框宽度（右边缘对齐按钮，不留空白）
-  list.style.width = el.getBoundingClientRect().width + 'px';
+  // 面板 absolute 定位跟随输入框（相对 #chatArea：脱离 input-area 的 backdrop root，
+  // 毛玻璃可采样聊天区/背景层；absolute 不受 transform/backdrop-filter 包含块干扰）
+  const caRect = document.getElementById('chatArea').getBoundingClientRect();
+  const rect = el.getBoundingClientRect();
+  list.style.left = (rect.left - caRect.left) + 'px';
+  list.style.bottom = (caRect.bottom - rect.top) + 'px';
+  list.style.width = rect.width + 'px';
   list.style.display = 'block';
   // 用 mousedown + preventDefault：在输入框 blur 前执行，保持焦点
   list.querySelectorAll('.mention-item').forEach((item) => {
@@ -550,8 +646,8 @@ function updateMentionList() {
       const t = el.value;
       const at = t.lastIndexOf('@', pos - 1);
       if (at === -1) return;
-      el.value = t.slice(0, at + 1) + name + t.slice(pos);  // @XX → @指定用户
-      const np = at + 1 + name.length;
+      el.value = t.slice(0, at + 1) + name + ' ' + t.slice(pos);  // @XX → @指定用户（末尾补空格，分隔后续文字）
+      const np = at + 1 + name.length + 1;
       el.selectionStart = el.selectionEnd = np;
       el.focus();
       el.dispatchEvent(new Event('input'));  // 触发高度自动调整
@@ -569,6 +665,11 @@ $msgInput.addEventListener('keydown', (e) => {
 $msgInput.addEventListener('blur', () => {
   const list = $('#mentionList');
   if (list) list.style.display = 'none';
+});
+// 窗口尺寸变化时若面板可见，重算 fixed 位置
+window.addEventListener('resize', () => {
+  const list = $('#mentionList');
+  if (list && list.style.display !== 'none') updateMentionList();
 });
 // ── 富媒体上传 ────────────────────────────────────────
 function toggleMD() {

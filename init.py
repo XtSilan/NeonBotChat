@@ -133,7 +133,7 @@ class MyClient(botpy.Client):
     async def _handle_c2c_message(self, message: C2CMessage) -> None:
         """统一处理私聊消息"""
         try:
-            from database import save_message, upsert_conversation, is_echo
+            from database import save_message, upsert_conversation, is_echo, maybe_update_direct_name
             from web_server import push_bot_message
 
             # 发送者 user_openid
@@ -173,10 +173,21 @@ class MyClient(botpy.Client):
             # 创建/更新私聊会话
             await upsert_conversation(user_id, name=f"私聊 {user_id[:10]}", conv_type="direct")
 
+            # 自动刷新对方最新昵称/头像（带缓存），会话名仅在未手动备注时更新
+            from PatchUserInfo import getUserNameCached, buildAvatarUrl
+            try:
+                dm_name = await getUserNameCached(APP_ID, user_id)
+                if dm_name:
+                    await maybe_update_direct_name(user_id, dm_name)
+            except Exception:
+                dm_name = ""
+            dm_avatar = buildAvatarUrl(APP_ID, user_id)
+
             saved = await save_message(
                 conversation_id=user_id,
                 sender_openid=user_id,
-                sender_name=user_id,
+                sender_name=dm_name,
+                sender_avatar=dm_avatar,
                 content=content,
                 direction="incoming",
                 msg_id=msg_id,
@@ -224,6 +235,7 @@ class MyClient(botpy.Client):
                 elements = get_msg_elements(msg_id_for_att)
                 # 优先通过 ref_msg_idx 反查本地 DB
                 qmsg_content = ""
+                qelem_media = None  # 被引用富媒体（msg_elements 里的 image/video url）
                 if elements:
                     # msg_elements[0] 可能是嵌套结构，递归提取文本字段
                     def _extract_elem_text(elem):
@@ -240,14 +252,28 @@ class MyClient(botpy.Client):
                                         return r
                         return ""
                     qmsg_content = _extract_elem_text(elements[0])
+                    # 被引用消息是富媒体时元素无文本，直接取 url 作缩略图
+                    if not qmsg_content and isinstance(elements[0], dict):
+                        _t = elements[0].get("type", "")
+                        _u = elements[0].get("url", "")
+                        if _u and _t in ("image", "video"):
+                            qmsg_content = "[图片]" if _t == "image" else "[视频]"
+                            qelem_media = [{"url": _u, "type": "image" if _t == "image" else "video"}]
                 import sqlite3 as _sq, os as _os
+                ref_target = get_ref_msg_idx(msg_id_for_att)
                 try:
                     qconn = _sq.connect(_os.path.join(_os.path.dirname(__file__), "neonbot.db"))
                     qconn.row_factory = _sq.Row
+                    # ref_msg_idx 就是被引用消息的 QQ 消息 ID（msg_id）；旧消息无 msg_idx 时才走 ref_idx 兜底
                     qrow = qconn.execute(
-                        "SELECT sender_name, content, attachments FROM messages WHERE conversation_id=? AND ref_idx=? ORDER BY id DESC LIMIT 1",
-                        (group_id, get_ref_msg_idx(msg_id_for_att))
+                        "SELECT sender_name, content, attachments FROM messages WHERE conversation_id=? AND msg_id=? ORDER BY id DESC LIMIT 1",
+                        (group_id, ref_target)
                     ).fetchone()
+                    if not qrow:
+                        qrow = qconn.execute(
+                            "SELECT sender_name, content, attachments FROM messages WHERE conversation_id=? AND ref_idx=? ORDER BY id DESC LIMIT 1",
+                            (group_id, ref_target)
+                        ).fetchone()
                     qconn.close()
                     if qrow:
                         quoted_sender = qrow["sender_name"] or ""
@@ -267,11 +293,20 @@ class MyClient(botpy.Client):
                                     quote_thumbs_str = _j.dumps(thumbs, ensure_ascii=False)
                             except Exception:
                                 pass
+                    elif qelem_media:
+                        quoted_content = qmsg_content
+                        import json as _j
+                        quote_thumbs_str = _j.dumps(qelem_media, ensure_ascii=False)
                     elif qmsg_content and qmsg_content.strip():
                         quoted_content = qmsg_content
                 except Exception:
                     if qmsg_content and qmsg_content.strip():
                         quoted_content = qmsg_content
+            # QQ API 对「仅引用未输入新文字」的消息 content 为「引用了一条消息」占位：
+            # 反查成功时正文由引用标签展示，清掉占位文案（详见下方 display_content 处理）
+            quote_placeholder = bool(quoted_content and content.strip() == "引用了一条消息")
+            if quote_placeholder:
+                content = ""
             if not raw_attachments:
                 # 降级：从 botpy 对象取
                 for src in ("attachments", "data", "_data"):
@@ -354,6 +389,9 @@ class MyClient(botpy.Client):
             has_video = any(a.get("content_type", "").startswith("video/") for a in norm_attachments)
             has_voice = any(a.get("content_type", "") == "voice" for a in norm_attachments)
             has_file = any(a.get("content_type", "") == "file" for a in norm_attachments)
+            # 纯引用消息（content 是「引用了一条消息」占位且已反查到引用内容）：正文留空，只显示引用标签
+            if quote_placeholder:
+                display_content = ""
             if not display_content.strip():
                 if has_image and has_face6:
                     display_content = "[表情]"

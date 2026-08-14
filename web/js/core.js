@@ -29,6 +29,7 @@ function connectWS() {
   ws.onopen = () => {
     console.log('[WS] connected');
     $('#railStatusDot').style.background = 'var(--online)';
+    $('#mobileStatusDot').style.background = 'var(--online)';  // 移动端顶栏在线点
   };
 
   ws.onmessage = (ev) => {
@@ -60,6 +61,7 @@ function connectWS() {
 
   ws.onclose = () => {
     $('#railStatusDot').style.background = 'var(--danger)';
+    $('#mobileStatusDot').style.background = 'var(--danger)';
     setTimeout(connectWS, 3000);
   };
 
@@ -159,6 +161,8 @@ function convPreview(c) {
   // 折叠换行/连续空白为单空格，保证预览始终单行省略
   const m = String(c.last_message).replace(/\s+/g, ' ').trim();
   if (!m) return '';
+  // 转发消息（聊天记录）预览统一显示 [聊天记录]（旧数据兜底，新数据由后端归一化）
+  if (m.startsWith('[群聊的聊天记录]') || m.startsWith('[好友的聊天记录]')) return '[聊天记录]';
   if (c.last_direction === 'center' && c.last_sender) {
     return c.last_sender + m;  // 系统气泡（禁言等）：名字内容，无空格
   }
@@ -329,6 +333,7 @@ let viewMode = 'chat';
 function showHomeView(skipAnim) {
   viewMode = 'home';
   currentConv = '';
+  hideJumpBtn();  // 回主页清掉「跳至最新消息」按钮与计数
   // 沉浸式：主侧栏向左滑出（覆盖层动画，动画结束再移除），侧侧栏保留
   const sb = document.querySelector('.sidebar');
   if (sb.style.display !== 'none' && !skipAnim) {
@@ -375,6 +380,7 @@ function showHomeView(skipAnim) {
   $inputArea.style.display = 'none';
   $msgInput.disabled = true;
   $sendBtn.disabled = true;
+  syncMobileTab();  // 移动端底栏高亮切到「主页」
 }
 
 function showChatView(skipAnim) {
@@ -384,13 +390,9 @@ function showChatView(skipAnim) {
   renderConvList($searchInput.value);  // 清除会话高亮
   // 恢复两侧栏（含侧侧栏，手机端进入聊天时可能被隐藏）
   document.querySelectorAll('.sidebar, .side-rail').forEach(el => el.style.display = '');
-  // 主侧栏向右弹出（首次加载直接显示无动画）
+  // 主侧栏直接显示（无滑入动画）
   const sb = document.querySelector('.sidebar');
   sb.style.display = '';
-  if (!skipAnim) {
-    sb.classList.add('anim-sidebar-in');
-    setTimeout(() => sb.classList.remove('anim-sidebar-in'), 300);
-  }
   $('#homeStats').style.display = 'none';
   $('#chatEmptyHint').style.display = 'flex';
   $('#btnExportReport').style.display = 'none';
@@ -411,6 +413,7 @@ function showChatView(skipAnim) {
   if (window.innerWidth <= 768) {
     document.getElementById('chatArea').classList.remove('mobile-open');
   }
+  syncMobileTab();  // 移动端底栏高亮切到「消息」
 }
 
 // 删除聊天/隐藏会话后回到聊天视图
@@ -419,6 +422,63 @@ function closeChatToHome() { showChatView(); }
 $('#railHomeBtn').addEventListener('click', showHomeView);
 $('#railMsgBtn').addEventListener('click', showChatView);
 $('#railMsgBtn').classList.add('active');  // 初始默认消息视图
+
+// ── 移动端底栏页面切换（主页/消息/收藏/设置） ────────────
+function setMobileTab(tab) {
+  document.querySelectorAll('.mb-tab').forEach(el => el.classList.toggle('active', el.dataset.page === tab));
+}
+// 根据当前 UI 状态同步底栏高亮：收藏/设置页面打开时高亮对应页签，否则回到主页/消息
+function syncMobileTab() {
+  if ($('#pageFav').classList.contains('open')) return setMobileTab('fav');
+  if ($('#pageSettings').classList.contains('open')) return setMobileTab('set');
+  setMobileTab(viewMode === 'home' ? 'home' : 'msg');
+}
+// 切换页面时关掉收藏/设置页面（底栏页签之间的互斥；openFav/openSettings 在 settings.js 定义）
+function closeMobilePages() {
+  $('#pageFav').classList.remove('open');
+  $('#pageSettings').classList.remove('open');
+  restoreMobilePageBack();  // 页面关闭：恢复被隐藏的消息/主页（没有页面开着时零开销）
+}
+// 打开收藏/设置页面前，把底下的消息/主页元素隐藏——毛玻璃直接糊在背景上，
+// 而不是糊在会话列表/看板内容上；关闭时按原样恢复（记录当时的显示状态）
+let mobileBackState = null;
+function hideMobilePageBack() {
+  if (window.innerWidth > 768) return;
+  const ca = document.getElementById('chatArea');
+  mobileBackState = {
+    sidebar: document.querySelector('.sidebar').style.display,  // ''（可见）或 'none'
+    chatOpen: ca.classList.contains('mobile-open') && !ca.classList.contains('home-mode'),
+    homeMode: ca.classList.contains('home-mode')
+  };
+  document.querySelector('.sidebar').style.display = 'none';
+  ca.classList.remove('mobile-open', 'home-mode');
+}
+function restoreMobilePageBack() {
+  if (window.innerWidth > 768 || !mobileBackState) return;
+  const sb = document.querySelector('.sidebar');
+  const ca = document.getElementById('chatArea');
+  sb.style.display = mobileBackState.sidebar;
+  if (mobileBackState.homeMode) ca.classList.add('mobile-open', 'home-mode');
+  else if (mobileBackState.chatOpen) ca.classList.add('mobile-open');
+  mobileBackState = null;
+}
+document.querySelectorAll('.mb-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const page = btn.dataset.page;
+    // 先记住当前页签是否已打开（用于再点一次关闭），再统一关掉收藏/设置页——
+    // 否则切到主页/消息时旧页还盖在上面，看起来像"点不动"
+    const wasOpen = page === 'fav'
+      ? $('#pageFav').classList.contains('open')
+      : page === 'set' ? $('#pageSettings').classList.contains('open') : false;
+    closeMobilePages();
+    if (page === 'home') showHomeView();
+    else if (page === 'msg') showChatView();
+    else if (page === 'fav' && !wasOpen) openFav();
+    else if (page === 'set' && !wasOpen) openSettings();
+    syncMobileTab();
+  });
+});
+syncMobileTab();  // 初始高亮「消息」（default_view=home 时 showHomeView 会再切到「主页」）
 
 // 聊天顶栏头像（有群头像显示图片，否则首字母）
 // 会话标题：显示名（备注>官方群名>旧名）+ 群人数
@@ -504,7 +564,27 @@ function toggleGroupInfoCard() {
   }
 }
 
-$chatNameInner.addEventListener('click', toggleGroupInfoCard);
+$chatNameInner.addEventListener('click', (e) => {
+  if (currentConvType === 'direct') {
+    // 私聊：点用户名 = 点对方头像，直接弹成员卡片（名字/头像用会话显示名兜底）；
+    // 锚定卡片已开时再点一次 = 关闭（与群卡片 toggle 一致）
+    const $mc = $('#memberCard');
+    if ($mc && $mc.style.display !== 'none' && $mc.dataset.anchored === '1') {
+      hideMemberCard();
+      e.stopPropagation();
+      return;
+    }
+    const conv = findConvAnywhere(currentConv);
+    if (!conv) return;
+    hideGroupInfoCard();
+    showMemberCard(e, currentConv,
+      senderDisplayName(conv.display_name || conv.name || conv.id, currentConv),
+      conv.avatar_url || '', false, true);
+    e.stopPropagation();  // 阻止 document 点击监听立即关闭卡片
+    return;
+  }
+  toggleGroupInfoCard();
+});
 document.addEventListener('click', (e) => {
   if ($groupInfoCard.style.display === 'none') return;
   // 点击群名文本或卡片内部不关闭（外层空白区不算）
@@ -524,6 +604,8 @@ function applyChatHeaderAvatar() {
 
 async function selectConv(convId, targetMsgId = 0) {
   currentConv = convId;
+  hideJumpBtn();  // 切换会话清掉「跳至最新消息」按钮与计数
+  closeMobilePages();  // 进入会话时收掉收藏/设置页面（如通知直跳等路径）
   hideGroupInfoCard();
   hideMemberCard();  // 切换会话关闭成员卡片
   const convNow = findConvAnywhere(convId);
@@ -531,8 +613,7 @@ async function selectConv(convId, targetMsgId = 0) {
   // 加群申请入口：仅机器人是当前群管理员/群主时显示；红点按当前群计数刷新
   updateJoinReqBtnVisibility();
   refreshJoinReqBadge();
-  // 私聊标题无悬停/点击高亮（仅群聊可点开信息卡片）
-  $chatName.classList.toggle('is-dm', !(convNow && convNow.type === 'group'));
+  // 私聊/群聊标题都可点击（群聊弹群信息卡片，私聊弹用户信息卡片）
   // 禁言状态 1s 轮询：仅群聊轮询，切换会话即停
   stopMutePolling();
   stopJoinReqPolling();
@@ -771,7 +852,7 @@ async function refreshConversations(silent = false) {
       });
       if (newMsgs.length > 0) {
         lastMsgId = newMsgs[newMsgs.length - 1].id;
-        if (!silent) scrollBottom();
+        // 滚动交给 appendMessage 里的 autoScrollMsg 按需处理（在底部才滚，翻阅中弹按钮）
       }
     }
   } catch (e) {
@@ -789,6 +870,8 @@ async function init() {
   await loadServerSettings();
   // 应用主题（客户端独立）
   setTheme(localStorage.getItem('neonbot_theme') || 'dark');
+  // 应用自定义主题色（客户端独立）
+  applyAccent(localStorage.getItem('neonbot_accent') || '');
   // 应用背景（客户端独立）
   applyBg();
   // 应用头像

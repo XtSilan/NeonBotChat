@@ -17,7 +17,7 @@ img.svg-icon[src*="delete.svg"], img.svg-icon[src*="chat.svg"], img.svg-icon[src
   --text-dim:   #94969b;
   --border:     #3e3f44;
   --accent:     #5865f2;
-  --accent-hover: #4752c4;
+  --accent-hover: color-mix(in srgb, var(--accent) 82%, black);
   --danger:     #ed4245;
   --online:     #3ba55c;
   --radius:     8px;

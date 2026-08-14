@@ -589,14 +589,58 @@ $('#btnClearHistory').addEventListener('click', async () => {
   }
 });
 
-// ── 设置弹窗 ─────────────────────────────────────────
+// ── 设置 / 收藏：桌面端弹窗 + 移动端真实页面，内容共用一份（住在 #pageSettings/#pageFav 里） ──
 const $settingsModal = $('#settingsModal');
+const $pageSettings = $('#pageSettings');
+const $pageFav = $('#pageFav');
+function openSettings() {
+  closeMobilePages();  // 收藏页若开着先关掉（两个页面互斥）
+  if (window.innerWidth <= 768) {
+    // 若内容此前留在桌面弹窗壳里（改窗口尺寸场景），先移回页面容器
+    if ($pageSettings.parentElement.classList.contains('modal-box')) document.body.appendChild($pageSettings);
+    hideMobilePageBack();  // 隐藏底下的消息/主页，毛玻璃糊在背景上
+    $pageSettings.classList.add('open');
+  } else {
+    $('#settingsModalBox').appendChild($pageSettings);
+    $settingsModal.classList.add('show');
+    // 桌面弹窗语义：每次打开都回到「通用」标签页、滚动置顶（移动端页面保留上次位置；
+    // 头像/logo 等入口在 openSettings 之后再点目标标签页，跳转不受影响）
+    document.querySelector('.settings-nav-item[data-tab="general"]').click();
+    $('.settings-content').scrollTop = 0;
+  }
+  syncMobileTab();  // 移动端底栏高亮切到「设置」
+}
+function closeSettings() {
+  $settingsModal.classList.remove('show');
+  $pageSettings.classList.remove('open');
+  syncMobileTab();
+}
+function openFav() {
+  closeMobilePages();  // 设置页若开着先关掉（两个页面互斥）
+  if (window.innerWidth <= 768) {
+    if ($pageFav.parentElement.classList.contains('modal-box')) document.body.appendChild($pageFav);
+    hideMobilePageBack();  // 隐藏底下的消息/主页，毛玻璃糊在背景上
+    $pageFav.classList.add('open');
+  } else {
+    $('#favModalBox').appendChild($pageFav);
+    $('#favModal').classList.add('show');
+  }
+  renderFavList();
+  syncMobileTab();  // 移动端底栏高亮切到「收藏」
+}
+function closeFav() {
+  $('#favModal').classList.remove('show');
+  $pageFav.classList.remove('open');
+  syncMobileTab();
+}
 $('#aboutBtn').addEventListener('click', () => {
   syncBgUI();
-  $settingsModal.classList.add('show');
+  openSettings();
 });
 $settingsModal.addEventListener('click', (e) => {
-  if (e.target === $settingsModal) $settingsModal.classList.remove('show');
+  if (e.target === $settingsModal) {
+    closeSettings();
+  }
 });
 // Tab 切换
 $('#settingsNav').addEventListener('click', (e) => {
@@ -643,7 +687,7 @@ async function refreshStatus() {
     const info = await API('/api/system-info');
     $sc.innerHTML = `
       <div style="text-align:center;margin-bottom:12px;position:relative;">
-        <span style="font-size:1.1em;font-weight:700;"><img src="icons/bot.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> NeonBotChat v26.8.6</span>
+        <span style="font-size:1.1em;font-weight:700;"><img src="icons/bot.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> NeonBotChat v26.8.7</span>
         <button class="glass-btn danger" onclick="restartServer()" style="position:absolute;right:0;top:0;padding:3px 10px;font-size:0.75em;color:var(--danger);"><img src="icons/restart_red.svg" style="width:12px;height:12px;filter:none;" alt=""> 重启服务</button>
       </div>
       <div class="stat-card">
@@ -733,6 +777,19 @@ async function renderStatsHtml() {
           <div style="background:${cnt ? 'var(--accent)' : 'rgba(255,255,255,0.07)'};border-radius:1px;height:${barH}px;opacity:${cnt ? 0.8 : 1};"></div>
         </div>`;
     }).join('');
+    // 星期×小时热力图（dow: 周日=0 … 周六=6；sqrt 分级让低值也有区分度）
+    const heat = st.heatmap || {};
+    const hmMax = Math.max(1, ...Object.values(heat).flatMap(m => Object.values(m)));
+    const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    const heatmapHtml = days.map((label, dow) => `
+      <div style="display:flex;align-items:center;gap:3px;">
+        <span style="width:28px;flex-shrink:0;font-size:0.62em;color:var(--text-dim);">${label}</span>
+        ${Array.from({ length: 24 }, (_, hr) => {
+          const cnt = (heat[dow] || {})[hr] || 0;
+          const op = cnt ? (0.15 + 0.85 * Math.sqrt(cnt / hmMax)).toFixed(2) : 1;
+          return `<div style="flex:1;height:14px;border-radius:2px;background:${cnt ? 'var(--accent)' : 'rgba(150,150,155,0.18)'};opacity:${op};" title="${label} ${String(hr).padStart(2, '0')}:00 — ${cnt}条"></div>`;
+        }).join('')}
+      </div>`).join('');
     // 媒体消息分布
     const media = st.media || {};
     const mediaTotal = Math.max(1, (media.image || 0) + (media.video || 0) + (media.voice || 0) + (media.file || 0));
@@ -762,6 +819,23 @@ async function renderStatsHtml() {
           <div class="stat-bar" style="width:70px;flex-shrink:0;"><div class="stat-bar-fill" style="width:${pct}%"></div></div>
         </div>`;
     }).join('');
+    // 发言达人 TOP5（近7天，按成员昵称聚合）
+    const senders = st.top_senders || [];
+    const sMax = Math.max(1, ...senders.map(s => s.count));
+    const senderRows = senders.map(s => {
+      const pct = Math.round(s.count / sMax * 100);
+      const initial = [...(s.name || '')][0] || '?';
+      const avatarHtml = s.avatar
+        ? `<img src="${escHtml(s.avatar)}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`
+        : `<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:0.65em;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${escHtml(initial)}</div>`;
+      return `
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+          ${avatarHtml}
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.82em;">${escHtml(s.name)}</span>
+          <span style="font-size:0.78em;color:var(--text-dim);white-space:nowrap;">${s.count} 条</span>
+          <div class="stat-bar" style="width:70px;flex-shrink:0;"><div class="stat-bar-fill" style="width:${pct}%"></div></div>
+        </div>`;
+    }).join('');
     // 会话参与度
     const convs = st.convs || {};
     const actPct = convs.total ? Math.round((convs.active || 0) / convs.total * 100) : 0;
@@ -786,12 +860,23 @@ async function renderStatsHtml() {
         </div>
       </div>
       <div class="stat-card">
+        <div class="stat-label"><img src="icons/clock.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 活跃时段热力图（近7天）</div>
+        <div style="display:flex;flex-direction:column;gap:3px;margin-top:8px;">${heatmapHtml}</div>
+        <div style="display:flex;justify-content:space-between;font-size:0.6em;color:var(--text-dim);margin-top:3px;">
+          <span>0时</span><span>6时</span><span>12时</span><span>18时</span><span>23时</span>
+        </div>
+      </div>
+      <div class="stat-card">
         <div class="stat-label"><img src="icons/media.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 媒体消息分布（近7天）</div>
         ${mediaRows}
       </div>
       <div class="stat-card">
         <div class="stat-label"><img src="icons/rank.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 活跃群 TOP5（近7天）</div>
         ${topRows || '<div class="stat-sub" style="margin-top:4px;">暂无数据</div>'}
+      </div>
+      <div class="stat-card">
+        <div class="stat-label"><img src="icons/rank.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 发言达人 TOP5（近7天）</div>
+        ${senderRows || '<div class="stat-sub" style="margin-top:4px;">暂无数据</div>'}
       </div>
       <div class="stat-card">
         <div class="stat-label"><img src="icons/groups.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 会话参与度</div>
@@ -873,12 +958,9 @@ $chkNotify.addEventListener('change', () => {
   }
 });
 
-$('#favBtn').addEventListener('click', () => {
-  renderFavList();
-  $('#favModal').classList.add('show');
-});
-$('#btnCloseFav').addEventListener('click', () => $('#favModal').classList.remove('show'));
-$('#favModal').addEventListener('click', (e) => { if (e.target === $('#favModal')) $('#favModal').classList.remove('show'); });
+$('#favBtn').addEventListener('click', () => { openFav(); });
+$('#btnCloseFav').addEventListener('click', () => { closeFav(); });
+$('#favModal').addEventListener('click', (e) => { if (e.target === $('#favModal')) { closeFav(); } });
 $('#btnClearFav').addEventListener('click', async () => {
   if (!(await showConfirm('确定清空全部收藏？'))) return;
   saveFavorites([]);
@@ -917,6 +999,9 @@ async function saveBio(text) { await saveServerSetting('bio', text); }
 function renderBio() {
   const bio = getBio();
   $('#bioDisplay').textContent = bio || '点击添加简介…';
+  // 移动端顶栏：昵称下方显示个性签名，未设置则隐藏
+  const mb = $('#mobileBio');
+  if (mb) { mb.textContent = bio; mb.style.display = bio ? '' : 'none'; }
 }
 
 $('#bioDisplay').addEventListener('click', () => {
@@ -957,6 +1042,18 @@ function applyBotAvatar() {
       ? `<img src="${escHtml(av)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.outerHTML='<img src=&quot;icons/query.svg&quot; class=&quot;svg-icon&quot; style=&quot;width:22px;height:22px&quot; alt=&quot;&quot;>'">`
       : `<img src="icons/query.svg" class="svg-icon" style="width:22px;height:22px;" alt="">`;
   }
+  // 移动端顶栏头像：真实头像不带反色滤镜（svg-icon 会 invert），回退时恢复 query.svg
+  const mav = $('#mobileBotAvatarImg');
+  if (mav) {
+    if (av) {
+      mav.classList.remove('svg-icon');
+      mav.src = av;
+      mav.onerror = () => { mav.onerror = null; mav.classList.add('svg-icon'); mav.src = 'icons/query.svg'; };
+    } else {
+      mav.src = 'icons/query.svg';
+      mav.classList.add('svg-icon');
+    }
+  }
 }
 
 // 头像来自官方接口（GET /users/@me），不提供手动上传
@@ -973,8 +1070,24 @@ async function refreshBotAvatar() {
 
 // 点击侧栏头像 → 打开设置并跳到「机器人信息」（头像只读，不提供上传）
 $('#railBotAvatar').addEventListener('click', () => {
-  $settingsModal.classList.add('show');
+  openSettings();
   document.querySelector('.settings-nav-item[data-tab="account"]').click();
+});
+
+// 移动端顶栏头像：与侧栏头像同行为 → 设置-账号与安全页
+$('#mobileBotAvatar').addEventListener('click', () => {
+  openSettings();
+  document.querySelector('.settings-nav-item[data-tab="account"]').click();
+});
+
+// 点击 Bot logo / 「BotChat」 → 打开设置并跳到「关于与帮助」（桌面侧栏 + 移动端顶栏共用）
+$('#railLogo').addEventListener('click', () => {
+  openSettings();
+  document.querySelector('.settings-nav-item[data-tab="about"]').click();
+});
+$('#mobileLogo').addEventListener('click', () => {
+  openSettings();
+  document.querySelector('.settings-nav-item[data-tab="about"]').click();
 });
 
 // 更新账号页的 Bot 名称
@@ -982,6 +1095,9 @@ function updateAccountBotName() {
   const el = $('#accountBotName');
   // 去掉末尾的 🤖，账号页不需要
   if (el) el.textContent = (botDisplayName || 'Bot').replace(/ 🤖$/, '');
+  // 移动端顶栏昵称
+  const mb = $('#mobileBotName');
+  if (mb) mb.textContent = botDisplayName || 'Bot';
 }
 
 // ── 自定义确认弹窗 ────────────────────────────────────
@@ -1191,6 +1307,24 @@ function setTheme(mode) {
   $('#themeLight').classList.toggle('active', mode === 'light');
   $('#themeAuto').classList.toggle('active', mode === 'auto');
   localStorage.setItem('neonbot_theme', mode);
+}
+
+// ── 自定义主题色 ────────────────────────────────────
+// --accent 深浅主题共用，:root 上覆盖一处即同改；--accent-hover 经 color-mix 自动派生
+const ACCENT_PRESETS = ['#5865f2', '#3ba55c', '#ed4245', '#f0a040', '#9b59b6', '#e91e63', '#00bcd4', '#7c3aed'];
+function applyAccent(hex) {
+  const root = document.documentElement;
+  if (hex) {
+    root.style.setProperty('--accent', hex);
+    localStorage.setItem('neonbot_accent', hex);
+  } else {
+    root.style.removeProperty('--accent');
+    localStorage.removeItem('neonbot_accent');
+  }
+  const cur = hex || '#5865f2';
+  document.querySelectorAll('.accent-swatch').forEach(s => s.classList.toggle('active', s.dataset.color === cur));
+  const picker = $('#accentPicker');
+  if (picker) picker.value = cur;
 }
 
 // 系统主题变化时，「自动」模式实时跟随

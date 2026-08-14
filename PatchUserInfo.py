@@ -4,6 +4,7 @@ import logging
 import asyncio
 import re
 import os
+import time
 
 # 设置日志
 logger = logging.getLogger(__name__)
@@ -58,6 +59,27 @@ async def getUserName(appid: str, openid: str) -> str:
     except json.JSONDecodeError:
         logger.error("[UserInfo] 昵称API返回数据解析失败")
         return ""
+
+# 昵称内存缓存：openid -> (拉取时间, 昵称)。oiapi 是第三方接口，避免高频重复调用
+_USER_NAME_CACHE: dict = {}
+_USER_NAME_TTL = 600  # 10 分钟
+
+async def getUserNameCached(appid: str, openid: str, ttl: int = _USER_NAME_TTL) -> str:
+    """带 TTL 缓存的昵称获取：缓存期内直接返回，过期/未命中才调 oiapi"""
+    now = time.time()
+    hit = _USER_NAME_CACHE.get(openid)
+    if hit and now - hit[0] < ttl:
+        return hit[1]
+    name = await getUserName(appid, openid)
+    if name:
+        _USER_NAME_CACHE[openid] = (now, name)
+    return name
+
+
+def buildAvatarUrl(appid: str, openid: str) -> str:
+    """构造 QQ 头像直链（q.qlogo.cn），无需下载"""
+    return f"https://q.qlogo.cn/qqapp/{appid}/{openid}/100" if appid and openid else ""
+
 
 async def getUserAvatar(appid: str, openid: str, save_local: bool = False) -> bytes | None:
     """

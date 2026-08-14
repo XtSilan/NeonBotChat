@@ -6,19 +6,20 @@
 <title>NeonBotChat 聊天</title>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css">
-<link rel="stylesheet" href="css/base.css?v=26.8.6">
-<link rel="stylesheet" href="css/layout.css?v=26.8.6">
-<link rel="stylesheet" href="css/components.css?v=26.8.6">
-<link rel="stylesheet" href="css/light.css?v=26.8.6">
+<link rel="stylesheet" href="css/base.css?v=26.8.7">
+<link rel="stylesheet" href="css/layout.css?v=26.8.7">
+<link rel="stylesheet" href="css/components.css?v=26.8.7">
+<link rel="stylesheet" href="css/light.css?v=26.8.7">
 </head>
 <body>
 <div class="chat-bg-layer" id="chatBgLayer"></div>
 
-<!-- ═══════════ Side Rail（窄图标栏） ═══════════ -->
 <aside class="side-rail">
   <div style="display:flex;flex-direction:column;align-items:center;">
-    <img src="icons/bot.svg" class="svg-icon" style="width:22px;height:22px;" alt="">
-    <span style="font-size:10px;line-height:1;color:var(--text-dim);margin-top:3px;letter-spacing:0.5px;user-select:none;">BotChat</span>
+    <div id="railLogo" title="关于与帮助" style="display:flex;flex-direction:column;align-items:center;cursor:pointer;">
+      <img src="icons/bot.svg" class="svg-icon" style="width:22px;height:22px;" alt="">
+      <span style="font-size:10px;line-height:1;color:var(--text-dim);margin-top:3px;letter-spacing:0.5px;user-select:none;">BotChat</span>
+    </div>
     <div style="position:relative;width:40px;height:40px;margin-top:14px;">
       <div id="railBotAvatar" title="机器人信息" style="width:40px;height:40px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:pointer;"><img src="icons/query.svg" class="svg-icon" style="width:22px;height:22px;" alt=""></div>
       <span id="railStatusDot" style="position:absolute;bottom:0;right:0;width:11px;height:11px;border-radius:50%;background:var(--online);border:2px solid #141519;z-index:2;"></span>
@@ -34,7 +35,32 @@
   </div>
 </aside>
 
-<!-- ═══════════ Sidebar ═══════════ -->
+<header class="mobile-topbar" id="mobileTopbar">
+  <button class="mt-profile" id="mobileBotAvatar" title="机器人信息">
+    <span class="mt-avatar-wrap">
+      <span class="mt-avatar">
+        <img src="icons/query.svg" class="svg-icon" id="mobileBotAvatarImg" alt="">
+      </span>
+      <i class="mt-dot" id="mobileStatusDot"></i>
+    </span>
+    <span class="mt-info">
+      <span class="mt-name" id="mobileBotName">Bot</span>
+      <span class="mt-bio" id="mobileBio" style="display:none;"></span>
+    </span>
+  </button>
+  <div class="mt-logo" id="mobileLogo" title="关于与帮助">
+    <img src="icons/bot.svg" class="svg-icon" alt="">
+    <span>BotChat</span>
+  </div>
+</header>
+
+<nav class="mobile-bottombar" id="mobileBottombar">
+  <button class="mb-tab" data-page="home" title="主页"><span class="mb-ic"><img src="icons/home.svg" class="svg-icon" alt=""></span><span class="mb-label">主页</span></button>
+  <button class="mb-tab" data-page="msg" title="消息"><span class="mb-ic"><img src="icons/message.svg" class="svg-icon" alt=""></span><span class="mb-label">消息</span></button>
+  <button class="mb-tab" data-page="fav" title="收藏"><span class="mb-ic"><img src="icons/favourite.svg" class="svg-icon" alt=""></span><span class="mb-label">收藏</span></button>
+  <button class="mb-tab" data-page="set" title="设置"><span class="mb-ic"><img src="icons/settings.svg" class="svg-icon" alt=""></span><span class="mb-label">设置</span></button>
+</nav>
+
 <aside class="sidebar">
   <div class="search-box">
     <input type="text" id="searchInput" placeholder="搜索会话…" autocomplete="off">
@@ -45,7 +71,6 @@
   </div>
 </aside>
 
-<!-- ═══════════ Add Conversation Modal ═══════════ -->
 <div class="modal-overlay" id="addConvModal">
   <div class="modal-box">
     <h3><img src="icons/add_group.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 添加好友或群聊</h3>
@@ -64,7 +89,6 @@
   </div>
 </div>
 
-<!-- ═══════════ Rename Conversation Modal ═══════════ -->
 <div class="modal-overlay" id="renameConvModal">
   <div class="modal-box">
     <h3><img src="icons/settings.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 群聊设置</h3>
@@ -111,7 +135,6 @@
   </div>
 </div>
 
-<!-- ═══════════ 查找聊天记录 Modal ═══════════ -->
 <div class="modal-overlay" id="msgSearchModal" style="z-index:150;">
   <div class="modal-box" style="width:480px; max-width:95vw;">
     <h3><img src="icons/search.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 查找聊天记录</h3>
@@ -123,7 +146,6 @@
   </div>
 </div>
 
-<!-- ═══════════ 群聊的聊天记录 Modal ═══════════ -->
 <div class="modal-overlay" id="chatRecordModal">
   <div class="modal-box" style="width:520px; max-width:95vw;">
     <h3><img src="icons/documents.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 群聊的聊天记录</h3>
@@ -134,7 +156,6 @@
   </div>
 </div>
 
-<!-- ═══════════ 加群申请 Modal ═══════════ -->
 <div class="modal-overlay" id="joinRequestModal">
   <div class="modal-box" style="width:560px; max-width:95vw;">
     <h3><img src="icons/groups.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 加群申请 <span id="joinRequestGroupName" style="font-size:0.85em;color:var(--text-dim);font-weight:normal;"></span></h3>
@@ -145,7 +166,6 @@
   </div>
 </div>
 
-<!-- ═══════════ 用户协议 Modal ═══════════ -->
 <div class="modal-overlay" id="agreementModal" style="z-index:150;">
   <div class="modal-box" style="width:520px;max-width:95vw;">
     <h3><img src="icons/documents.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 用户协议</h3>
@@ -157,7 +177,6 @@
   </div>
 </div>
 
-<!-- ═══════════ Confirm Dialog ═══════════ -->
 <div class="modal-overlay" id="confirmDialog">
   <div class="modal-box" style="text-align:center;width:360px;">
     <div id="confirmIcon" style="font-size:2em;margin-bottom:8px;"></div>
@@ -175,7 +194,6 @@
   </div>
 </div>
 
-<!-- ═══════════ Keyboard Editor Modal ═══════════ -->
 <div class="modal-overlay" id="kbdModal">
   <div class="modal-box" style="width:500px;">
     <h3><img src="icons/button.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> 键盘消息</h3>
@@ -189,7 +207,6 @@
   </div>
 </div>
 
-<!-- ═══════════ Custom Message Modal ═══════════ -->
 <div class="modal-overlay" id="customMsgModal">
   <div class="modal-box" style="width:500px;">
     <h3><img src="icons/custom.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> 自定义消息</h3>
@@ -201,7 +218,6 @@
   </div>
 </div>
 
-<!-- ═══════════ Card Editor Modal ═══════════ -->
 <div class="modal-overlay" id="cardModal">
   <div class="modal-box" style="width:480px;">
     <h3><img src="icons/card.svg" class="svg-icon" style="width:20px;height:20px;" alt=""> 卡片消息</h3>
@@ -209,14 +225,12 @@
       <button class="theme-btn active" id="cardTypeTuwen" onclick="switchCardType('tuwen')">图文类型</button>
       <button class="theme-btn" id="cardTypeOther" onclick="switchCardType('other')">其他类型</button>
     </div>
-    <!-- 图文类型表单 -->
     <div id="cardFormTuwen">
       <input type="text" id="cardTitle" placeholder="卡片标题" autocomplete="off" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;margin-bottom:8px;">
       <input type="text" id="cardDesc" placeholder="卡片简介" autocomplete="off" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;margin-bottom:8px;">
       <input type="text" id="cardPicUrl" placeholder="介绍图地址 (https://...)" autocomplete="off" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;margin-bottom:8px;">
       <input type="text" id="cardJumpUrl" placeholder="跳转 URL (https://...)" autocomplete="off" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;margin-bottom:8px;">
     </div>
-    <!-- 其他类型 JSON 编辑器 -->
     <div id="cardFormOther" style="display:none;">
       <textarea id="cardJsonInput" style="width:100%;height:180px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:0.8em;resize:vertical;outline:none;" placeholder='{&#10;  "type": "...",&#10;  ...&#10;}' spellcheck="false"></textarea>
     </div>
@@ -227,44 +241,26 @@
   </div>
 </div>
 
-<!-- ═══════════ Settings Modal ═══════════ -->
 <div class="modal-overlay" id="settingsModal">
-  <div class="modal-box" style="display:flex; gap:0; padding:0; width:720px; max-width:95vw; height:70vh; overflow:hidden;">
-    <!-- 左侧导航（默认折叠：只留图标；桌面端折叠样式不生效，不受影响） -->
+  <div class="modal-box" style="display:flex; gap:0; padding:0; width:720px; max-width:95vw; height:70vh; overflow:hidden;" id="settingsModalBox"></div>
+</div>
+<section class="mobile-page" id="pageSettings">
     <div class="settings-nav folded" id="settingsNav">
       <button class="settings-nav-fold" id="btnNavFold" title="展开导航文字"><img src="icons/right_arrow.svg" class="svg-icon" style="width:16px;height:16px;" alt=""></button>
       <div class="settings-nav-item active" data-tab="general"><img src="icons/settings.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 通用</div>
-      <div class="settings-nav-item" data-tab="status"><img src="icons/system_status.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 状态</div>
-      <div class="settings-nav-item" data-tab="logs"><img src="icons/log.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 日志</div>
+      <div class="settings-nav-item" data-tab="appearance"><img src="icons/appearance.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 外观与显示</div>
+      <div class="settings-nav-item" data-tab="status"><img src="icons/system_status.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 运行状态</div>
+      <div class="settings-nav-item" data-tab="logs"><img src="icons/log.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 后台日志</div>
       <div class="settings-nav-item" data-tab="account"><img src="icons/security.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 账号与安全</div>
-      <div class="settings-nav-item" data-tab="about"><img src="icons/bot.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 关于</div>
+      <div class="settings-nav-item" data-tab="about"><img src="icons/bot.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 关于与帮助</div>
     </div>
-    <!-- 右侧内容（实色背景，不毛玻璃） -->
     <div class="settings-content" style="flex:1; min-width:0; padding:24px; overflow-y:auto;">
-      <!-- 通用 -->
       <div class="settings-tab" id="tab-general">
-        <h3 style="margin-bottom:12px;"><img src="icons/appearance.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 外观</h3>
-        <div style="display:flex; gap:8px; margin-bottom:16px;">
-          <button class="theme-btn" id="themeLight" onclick="setTheme('light')"><img src="icons/light_mode.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 浅色</button>
-          <button class="theme-btn" id="themeDark" onclick="setTheme('dark')"><img src="icons/dark_mode.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 深色</button>
-          <button class="theme-btn" id="themeAuto" onclick="setTheme('auto')"><img src="icons/auto.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 自动</button>
-        </div>
         <h3 style="margin-bottom:12px;"><img src="icons/home.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 默认页面</h3>
         <div style="display:flex; gap:8px; margin-bottom:16px;">
           <button class="theme-btn" id="defViewHome" onclick="setDefaultView('home')"><img src="icons/home.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 主页</button>
           <button class="theme-btn active" id="defViewChat" onclick="setDefaultView('chat')"><img src="icons/message.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 消息</button>
         </div>
-        <h3 style="margin-bottom:16px;"><img src="icons/image.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 聊天背景</h3>
-        <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
-          <input type="file" id="bgFileInput" accept="image/*" style="display:none;">
-          <button class="glass-btn" id="btnPickBg"><img src="icons/browse.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 选择图片</button>
-          <button class="glass-btn danger" id="btnClearBg" style="color:var(--danger);">清除背景</button>
-        </div>
-        <label style="display:flex; align-items:center; gap:8px;">
-          透明度
-          <input type="range" id="bgOpacity" min="5" max="100" value="20" style="flex:1;">
-          <span id="bgOpacityVal">20%</span>
-        </label>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;">
           <span style="font-size:0.9em;">桌面通知</span>
           <label class="switch">
@@ -283,18 +279,49 @@
           <button class="glass-btn danger" id="btnClearAllHistory" style="color:var(--danger);"><img src="icons/delete.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 清空全部</button>
         </div>
       </div>
-      <!-- 状态 -->
+      <div class="settings-tab" id="tab-appearance" style="display:none;">
+        <h3 style="margin-bottom:12px;"><img src="icons/appearance.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 显示模式</h3>
+        <div style="display:flex; gap:8px; margin-bottom:16px;">
+          <button class="theme-btn" id="themeLight" onclick="setTheme('light')"><img src="icons/light_mode.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 浅色</button>
+          <button class="theme-btn" id="themeDark" onclick="setTheme('dark')"><img src="icons/dark_mode.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 深色</button>
+          <button class="theme-btn" id="themeAuto" onclick="setTheme('auto')"><img src="icons/auto.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 自动</button>
+        </div>
+        <h3 style="margin-bottom:12px;"><img src="icons/custom.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 主题色</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <button class="theme-btn accent-swatch" style="background:#5865f2;" data-color="#5865f2" onclick="applyAccent('#5865f2')"></button>
+          <button class="theme-btn accent-swatch" style="background:#3ba55c;" data-color="#3ba55c" onclick="applyAccent('#3ba55c')"></button>
+          <button class="theme-btn accent-swatch" style="background:#ed4245;" data-color="#ed4245" onclick="applyAccent('#ed4245')"></button>
+          <button class="theme-btn accent-swatch" style="background:#f0a040;" data-color="#f0a040" onclick="applyAccent('#f0a040')"></button>
+          <button class="theme-btn accent-swatch" style="background:#9b59b6;" data-color="#9b59b6" onclick="applyAccent('#9b59b6')"></button>
+          <button class="theme-btn accent-swatch" style="background:#e91e63;" data-color="#e91e63" onclick="applyAccent('#e91e63')"></button>
+          <button class="theme-btn accent-swatch" style="background:#00bcd4;" data-color="#00bcd4" onclick="applyAccent('#00bcd4')"></button>
+          <button class="theme-btn accent-swatch" style="background:#7c3aed;" data-color="#7c3aed" onclick="applyAccent('#7c3aed')"></button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">
+          <input type="color" id="accentPicker" value="#5865f2" onchange="applyAccent(this.value)" style="width:40px;height:30px;border:none;background:none;cursor:pointer;padding:0;">
+          <button class="glass-btn" onclick="applyAccent('')">恢复默认</button>
+        </div>
+        <h3 style="margin-bottom:16px;"><img src="icons/image.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 聊天背景</h3>
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+          <input type="file" id="bgFileInput" accept="image/*" style="display:none;">
+          <button class="glass-btn" id="btnPickBg"><img src="icons/browse.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 选择图片</button>
+          <button class="glass-btn danger" id="btnClearBg" style="color:var(--danger);">清除背景</button>
+        </div>
+        <label style="display:flex; align-items:center; gap:8px;">
+          透明度
+          <input type="range" id="bgOpacity" min="5" max="100" value="20" style="flex:1;">
+          <span id="bgOpacityVal">20%</span>
+        </label>
+      </div>
       <div class="settings-tab" id="tab-status" style="display:none;">
         <h3><img src="icons/system_status.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 运行状态</h3>
         <div id="statusContent" style="font-size:0.85em; color:var(--text-dim);">加载中…</div>
       </div>
-      <!-- 日志 -->
       <div class="settings-tab" id="tab-logs" style="display:none;">
-        <h3 style="margin-bottom:8px;"><img src="icons/log.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 运行日志</h3>
+        <h3 style="margin-bottom:8px;"><img src="icons/log.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 后台日志</h3>
         <p style="font-size:0.8em;color:var(--text-dim);margin-bottom:8px;">最近 500 条服务端日志，每 2 秒自动刷新</p>
         <div id="logsContent" style="height:calc(70vh - 130px);overflow-y:auto;background:rgba(0,0,0,0.12);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px;font-family:Consolas,Menlo,monospace;font-size:0.76em;line-height:1.65;white-space:pre-wrap;word-break:break-all;">加载中…</div>
       </div>
-      <!-- 账号与安全 -->
       <div class="settings-tab" id="tab-account" style="display:none;">
         <h3><img src="icons/bot.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 机器人信息</h3>
         <div style="display:flex;align-items:center;gap:14px;margin:16px 0;">
@@ -321,20 +348,16 @@
         <p style="font-size:0.75em;color:var(--text-dim);margin-bottom:14px;">关闭该设置可提高安全性，避免IP泄露等隐私风险。</p>
         <button class="glass-btn danger" id="btnLogout" style="color:var(--danger);width:100%;"><img src="icons/logout.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 退出登录</button>
       </div>
-      <!-- 关于 -->
       <div class="settings-tab" id="tab-about" style="display:none; text-align:center;">
-        <h3>关于</h3>
         <p style="margin:12px 0;"><img src="icons/bot.svg" class="svg-icon" style="width:48px;height:48px;" alt=""></p>
-        <p style="font-size:1.2em;font-weight:700;margin:8px 0;">NeonBot v26.8.6</p>
+        <p style="font-size:1.2em;font-weight:700;margin:8px 0;">NeonBot v26.8.7</p>
         <p style="font-size:0.85em;color:var(--text-dim);font-style:italic;margin:4px 0;">✨ 基于 QQ Botpy SDK 开发的 WebUI 前端管理面板，支持真人收发消息、管理群。</p>
         <a href="/api/readme" target="_blank" style="color:var(--accent);font-size:0.9em;display:block;margin-top:16px;"><img src="icons/documents.svg" class="svg-icon" style="width:14px;height:14px;" alt=""> 阅读 README.md</a>
         <p style="color:var(--text-dim);font-size:0.85em;margin-top:12px;">Copyright © 2026 Neon. All Rights Reserved. <a href="javascript:void(0)" onclick="showUserAgreement()" style="color:var(--accent);">用户协议</a></p>
       </div>
     </div>
-  </div>
-</div>
+</section>
 
-<!-- ═══════════ Context Menu ═══════════ -->
 <div class="context-menu" id="ctxMenu">
   <div class="ctx-item" id="ctxCopy"><img src="icons/copy.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 复制</div>
   <div class="ctx-item" id="ctxForward"><img src="icons/share.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 转发</div>
@@ -348,7 +371,6 @@
   <div class="ctx-item danger" id="ctxDelete"><img src="icons/delete.svg" class="svg-icon ctx-icon" style="width:16px;height:16px;" alt=""><img src="icons/delete_black.svg" class="svg-icon ctx-icon-hover" style="width:16px;height:16px;" alt=""> 删除</div>
 </div>
 
-<!-- ═══════════ Conversation Context Menu ═══════════ -->
 <div class="context-menu" id="convCtxMenu">
   <div class="ctx-item" id="convCtxPin"><img src="icons/up.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 置顶</div>
   <div class="ctx-item" id="convCtxMute"><img src="icons/donotdisturb.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 消息免打扰</div>
@@ -357,31 +379,28 @@
   <div class="ctx-item danger" id="convCtxDelete"><img src="icons/delete.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 删除聊天</div>
 </div>
 
-<!-- ═══════════ 聊天区空白右键菜单（清屏） ═══════════ -->
 <div class="context-menu" id="clearCtxMenu" style="display:none;">
   <div class="ctx-item" id="ctxClearScreen">清屏</div>
 </div>
 
-<!-- ═══════════ Batch Action Bar ═══════════ -->
 <div class="batch-bar" id="batchBar">
   <span id="batchCount">已选 0 条</span>
   <button class="glass-btn" id="btnCancelSelect">取消</button>
   <button style="background:var(--danger);color:#fff;padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-weight:600;" id="btnBatchDelete"><img src="icons/delete.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 批量删除</button>
 </div>
 
-<!-- ═══════════ Favorites Modal ═══════════ -->
 <div class="modal-overlay" id="favModal">
-  <div class="modal-box" style="max-height:70vh;overflow-y:auto;width:520px;max-width:95vw;">
-    <h3><img src="icons/favourite.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 收藏列表</h3>
-    <div id="favList" style="max-height:50vh;overflow-y:auto;"></div>
-    <div class="modal-actions" style="margin-top:12px;">
-      <button class="glass-btn" id="btnCloseFav">关闭</button>
-      <button class="glass-btn danger" id="btnClearFav" style="color:var(--danger);">清空全部</button>
-    </div>
-  </div>
+  <div class="modal-box" style="max-height:70vh;overflow-y:auto;width:520px;max-width:95vw;" id="favModalBox"></div>
 </div>
+<section class="mobile-page" id="pageFav">
+  <h3><img src="icons/favourite.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 收藏列表</h3>
+  <div id="favList"></div>
+  <div class="modal-actions" style="margin-top:12px;">
+    <button class="glass-btn" id="btnCloseFav">关闭</button>
+    <button class="glass-btn danger" id="btnClearFav" style="color:var(--danger);">清空全部</button>
+  </div>
+</section>
 
-<!-- ═══════════ Forward Modal ═══════════ -->
 <div class="modal-overlay" id="forwardModal">
   <div class="modal-box">
     <h3><img src="icons/share.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 转发消息</h3>
@@ -394,7 +413,6 @@
   </div>
 </div>
 
-<!-- ═══════════ 群简介详情弹窗（放 body 顶层，避免毛玻璃卡片影响 fixed 居中） ═══════════ -->
 <div class="modal-overlay" id="memoModal">
   <div class="modal-box" style="width:520px;max-width:95vw;">
     <h3><img src="icons/groups.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 群简介</h3>
@@ -405,7 +423,6 @@
   </div>
 </div>
 
-<!-- ═══════════ 禁言时长选择弹窗 ═══════════ -->
 <div class="modal-overlay" id="muteModal">
   <div class="modal-box" style="width:460px;max-width:95vw;">
     <h3><img src="icons/donotdisturb.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 禁言成员</h3>
@@ -420,7 +437,6 @@
   </div>
 </div>
 
-<!-- ═══════════ 成员信息卡片（点击头像/撤回蓝字弹出，fixed 跟随点击位置） ═══════════ -->
 <div class="member-card" id="memberCard" style="display:none;">
   <div class="mc-head">
     <div class="mc-avatar" id="mcAvatar">#</div>
@@ -431,10 +447,8 @@
   </div>
 </div>
 
-<!-- ═══════════ Toast Container ═══════════ -->
 <div class="toast-container" id="toastContainer"></div>
 
-<!-- ═══════════ Image Lightbox ═══════════ -->
 <div class="lightbox" id="lightbox">
   <div class="lightbox-backdrop" id="lightboxBackdrop"></div>
   <button class="lightbox-close" id="lightboxClose" title="关闭 (Esc)"><img src="icons/close.svg" class="svg-icon" style="width:16px;height:16px;" alt=""></button>
@@ -447,7 +461,6 @@
   <div class="lightbox-counter" id="lightboxCounter"></div>
 </div>
 
-<!-- ═══════════ Chat Area ═══════════ -->
 <main class="chat-area" id="chatArea">
   <div class="chat-header" id="chatHeader" style="display:none;">
     <button class="mobile-back-btn" id="mobileBackBtn" title="返回">←</button>
@@ -455,27 +468,25 @@
     <span class="header-name" id="chatName" title="点击查看群信息"><span id="chatNameInner">选择会话</span></span>
     <button class="btn-settings" id="btnJoinRequests" title="加群申请" style="position:relative;"><img src="icons/groups.svg" class="svg-icon" style="width:16px;height:16px;" alt=""><span id="btnJoinReqBadge" class="join-badge" style="display:none;">0</span></button>
     <button class="btn-settings" id="btnSettings" title="设置备注"><img src="icons/settings.svg" class="svg-icon" style="width:16px;height:16px;" alt=""></button>
-    <!-- 点击群名弹出的群信息卡片 -->
-    <div class="group-info-card" id="groupInfoCard" style="display:none;">
-      <div class="gic-head">
-        <div class="gic-avatar" id="gicAvatar">#</div>
-        <div class="gic-titles">
-          <div class="gic-name" id="gicName"></div>
-          <div class="gic-id" id="gicId"></div>
-        </div>
-      </div>
-      <div class="gic-tags" id="gicTags"></div>
-      <div class="gic-row"><span class="gic-label">群简介</span><span class="gic-value" id="gicMemo"></span></div>
-      <div class="gic-row"><span class="gic-label">群分类</span><span class="gic-value" id="gicClass"></span></div>
-    </div>
   </div>
-  <!-- 顶栏下方常驻提示：机器人未被授予接收全量消息权限（不自动关闭，进群时按 bot_state 显示） -->
+  <div class="group-info-card" id="groupInfoCard" style="display:none;">
+    <div class="gic-head">
+      <div class="gic-avatar" id="gicAvatar">#</div>
+      <div class="gic-titles">
+        <div class="gic-name" id="gicName"></div>
+        <div class="gic-id" id="gicId"></div>
+      </div>
+    </div>
+    <div class="gic-tags" id="gicTags"></div>
+    <div class="gic-row"><span class="gic-label">群简介</span><span class="gic-value" id="gicMemo"></span></div>
+    <div class="gic-row"><span class="gic-label">群分类</span><span class="gic-value" id="gicClass"></span></div>
+  </div>
   <div class="recv-warn-banner" id="recvWarnBanner" style="display:none;">
     <span>当前群聊本机器人未被授予接收全量消息权限，仅能接收at消息。</span>
     <button class="recv-warn-close" id="recvWarnClose" title="关闭提示（本会话不再显示）"><img src="icons/close.svg" class="svg-icon" style="width:12px;height:12px;" alt=""></button>
   </div>
   <div class="chat-empty" id="chatEmpty" style="overflow-y:auto;position:relative;">
-    <div id="homeStats" style="width:100%;max-width:760px;text-align:left;display:none;">加载中…</div>
+    <div id="homeStats" style="width:100%;max-width:1280px;text-align:left;display:none;">加载中…</div>
     <div id="chatEmptyHint" style="display:flex;flex-direction:column;align-items:center;gap:10px;">
       <div class="icon"><img src="icons/chat.svg" class="svg-icon" style="width:48px;height:48px;" alt=""></div>
       <div>选择一个聊天</div>
@@ -483,6 +494,7 @@
     <button class="glass-btn" id="btnExportReport" style="position:absolute;bottom:14px;right:14px;z-index:3;padding:5px 12px;font-size:0.8em;display:none;"><img src="icons/documents.svg" class="svg-icon" style="width:14px;height:14px;" alt=""> 导出周报</button>
   </div>
   <div class="messages" id="messages" style="display:none;"></div>
+  <button class="jump-new-btn" id="jumpNewBtn" style="display:none;">↓ 跳转至最新消息(0条)</button>
   <div class="input-area" id="inputArea" style="display:none;flex-direction:column;">
     <div class="input-quote-bar" id="inputQuoteBar" style="display:none;">
       <div class="input-quote-content">
@@ -491,7 +503,6 @@
       </div>
       <button class="input-quote-close" id="inputQuoteClose" title="取消引用"><img src="icons/close.svg" class="svg-icon" style="width:12px;height:12px;" alt=""></button>
     </div>
-    <div class="mention-list" id="mentionList" style="display:none;"></div>
     <div style="display:flex;gap:10px;align-items:flex-end;width:100%;">
     <textarea id="msgInput" rows="1" placeholder="输入消息… (Enter 发送, Shift+Enter 换行)" disabled></textarea>
     <label class="md-toggle" id="mdToggle" title="发送为 Markdown" style="display:none;"><input type="checkbox" id="mdCheckbox"> MD</label>
@@ -499,9 +510,9 @@
     <button id="sendBtn" disabled>发送</button>
     </div>
   </div>
+  <div class="mention-list" id="mentionList" style="display:none;"></div>
   <div class="drop-overlay" id="dropOverlay" style="display:none;">松开以发送文件</div>
 
-<!-- ═══════════ Rich Media Menu ═══════════ -->
 <div class="context-menu" id="richMenu" style="display:none;">
   <div class="ctx-item" id="richImage" onclick="pickRichMedia('image')"><img src="icons/image.svg" class="svg-icon" style="width:16px;height:16px;" alt="">  图片</div>
   <div class="ctx-item" id="richVideo" onclick="pickRichMedia('video')"><img src="icons/video.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 视频</div>
@@ -517,11 +528,11 @@
 <input type="file" id="richFileInput" accept="image/*" style="display:none;">
 </main>
 
-<script src="js/utils.js?v=26.8.6"></script>
-<script src="js/core.js?v=26.8.6"></script>
-<script src="js/messages.js?v=26.8.6"></script>
-<script src="js/lightbox.js?v=26.8.6"></script>
-<script src="js/contextmenu.js?v=26.8.6"></script>
-<script src="js/settings.js?v=26.8.6"></script>
+<script src="js/utils.js?v=26.8.7"></script>
+<script src="js/core.js?v=26.8.7"></script>
+<script src="js/messages.js?v=26.8.7"></script>
+<script src="js/lightbox.js?v=26.8.7"></script>
+<script src="js/contextmenu.js?v=26.8.7"></script>
+<script src="js/settings.js?v=26.8.7"></script>
 </body>
 </html>

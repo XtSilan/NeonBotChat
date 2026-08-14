@@ -658,6 +658,23 @@ async def api_refresh_direct_avatar(conv_id: str):
     return {"ok": True, "avatar": url}
 
 
+@app.get("/api/user-info/{openid}")
+async def api_user_info(openid: str):
+    """按 OpenID 拉取最新昵称与头像直链（昵称带 10 分钟缓存）。
+    点击成员卡片时调用，用于自动刷新显示；拉取失败返回空字段，前端保留旧值"""
+    if not _BOT_APP_ID or not openid:
+        return {"ok": False, "name": "", "avatar_url": ""}
+    try:
+        import time as _time
+        from PatchUserInfo import getUserNameCached, buildAvatarUrl
+        name = await getUserNameCached(_BOT_APP_ID, openid)
+        # qlogo URL 由 openid 派生、换头像后 URL 不变——加时间戳参数绕过浏览器缓存，
+        # 保证每次点击卡片都拉到最新头像
+        return {"ok": True, "name": name, "avatar_url": buildAvatarUrl(_BOT_APP_ID, openid) + f"?v={int(_time.time())}"}
+    except Exception:
+        return {"ok": False, "name": "", "avatar_url": ""}
+
+
 def _conv_group_info(conv: dict) -> dict:
     """从会话记录提取群信息返回体（简介/分类/标签解析 JSON）"""
     try:
@@ -876,13 +893,14 @@ async def api_system_note(request: Request):
 
     conv_id = body.get("conv_id", "")
     member_name = body.get("member_name", "")
+    member_openid = body.get("sender_openid", "")  # 被禁言成员 openid：点气泡蓝字弹成员卡片用
     content = body.get("content", "")  # 如「被你禁言1天2小时」
     if not conv_id or not content:
         return JSONResponse({"error": "缺少 conv_id 或 content"}, status_code=400)
 
     from database import save_message
     saved = await save_message(
-        conversation_id=conv_id, sender_openid="", sender_name=member_name,
+        conversation_id=conv_id, sender_openid=member_openid, sender_name=member_name,
         content=content, direction="center",
     )
     return {"ok": True, "id": saved.get("id") if isinstance(saved, dict) else 0}
@@ -895,6 +913,9 @@ async def api_mute_status(conv_id: str):
     conv = await get_conversation(conv_id)
     if not conv or conv.get("type") != "group":
         return JSONResponse({"error": "会话不存在或不是群聊"}, status_code=404)
+    # 机器人不是群管理员：禁言接口无权限（QQ API 返回 400），直接返回空列表，避免 1s 轮询反复打接口触发 30 QPM 限制
+    if conv.get("bot_role") not in ("admin", "owner"):
+        return {"ok": True, "members": [], "no_permission": True}
 
     cached = _mute_status_cache.get(conv_id)
     if cached and _time.time() - cached[0] < MUTE_STATUS_TTL:
@@ -1214,10 +1235,16 @@ async def api_send(request: Request):
         try:
             qconn = sqlite3.connect(_os.path.join(_os.path.dirname(__file__), "neonbot.db"))
             qconn.row_factory = sqlite3.Row
+            # message_reference.message_id 就是被引用消息的 QQ 消息 ID；旧消息无 ref_idx 时才按 ref_idx 兜底
             qrow = qconn.execute(
-                "SELECT sender_name, content, attachments FROM messages WHERE conversation_id=? AND ref_idx=? ORDER BY id DESC LIMIT 1",
+                "SELECT sender_name, content, attachments FROM messages WHERE conversation_id=? AND msg_id=? ORDER BY id DESC LIMIT 1",
                 (conv_id, message_reference["message_id"])
             ).fetchone()
+            if not qrow:
+                qrow = qconn.execute(
+                    "SELECT sender_name, content, attachments FROM messages WHERE conversation_id=? AND ref_idx=? ORDER BY id DESC LIMIT 1",
+                    (conv_id, message_reference["message_id"])
+                ).fetchone()
             qconn.close()
             if qrow:
                 quoted_sender = qrow["sender_name"] or ""

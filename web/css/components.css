@@ -370,11 +370,9 @@ body.light .link-card { background: rgba(0,0,0,0.05); }
 .anim-slide-up { animation: slideUpFade 0.25s ease forwards; }
 .anim-slide-down { animation: slideDownFade 0.25s ease forwards; }
 
-/* 主侧栏切换动画（主页模式向左收，消息模式向右弹出） */
+/* 主侧栏切换动画（主页模式向左收；消息模式已取消滑入动画，直接显示） */
 @keyframes sidebarOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(-100%); } }
-@keyframes sidebarIn { from { opacity: 0; transform: translateX(-100%); } to { opacity: 1; transform: translateX(0); } }
 .anim-sidebar-out { animation: sidebarOut 0.25s ease forwards; }
-.anim-sidebar-in { animation: sidebarIn 0.25s ease forwards; }
 
 
 /* iOS Safari：禁用长按系统菜单/文本选择（长按改为右键菜单） */
@@ -404,6 +402,8 @@ body.light .link-card { background: rgba(0,0,0,0.05); }
 .cr-bubble { max-width: 82%; padding: 8px 12px; border-radius: 10px; font-size: 0.88em; line-height: 1.5; word-break: break-word; white-space: pre-wrap; }
 .cr-bubble.in { background: var(--bubble-in); }
 .cr-bubble.out { background: var(--bubble-out); color: #fff; }
+/* 转发消息展开详情里的富媒体（真实渲染） */
+.cr-bubble-media { display: block; max-width: 260px; max-height: 220px; margin-top: 6px; border-radius: 8px; object-fit: contain; }
 
 .stat-card {
   background: rgba(255,255,255,0.04); border-radius: 8px;
@@ -411,7 +411,7 @@ body.light .link-card { background: rgba(0,0,0,0.05); }
 }
 /* 首页统计看板卡片：网格布局 + 明显垫底 + 鼠标聚焦光效 */
 #homeStats {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
 }
 #homeStats .stat-card {
   position: relative; overflow: hidden;
@@ -486,16 +486,30 @@ body.light #homeStats .stat-card {
 }
 .theme-btn:hover { color: var(--text); background: rgba(255,255,255,0.12); }
 .theme-btn.active { background: var(--accent); color: #fff; }
+/* 主题色色板（自定义 accent 的预设色块；色块背景走内联 style，hover/active 用边框反馈） */
+.accent-swatch { width: 30px; height: 30px; padding: 0; border-radius: 8px; border: 2px solid transparent; }
+.accent-swatch:hover { border-color: rgba(255, 255, 255, 0.35); }
+.accent-swatch.active { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
 
 /* ── Settings Nav ────────────────────────────── */
-.settings-content { background: var(--bg); }  /* 设置右半边：实色，不用毛玻璃 */
+/* 嵌套在已有 blur 的父级里时子元素 backdrop-filter 无效，因此设置弹窗的 modal-box
+   去掉 blur，改由导航栏 / 内容区各自毛玻璃（真正可感知） */
+#settingsModal .modal-box {
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  background: rgba(30, 31, 35, 0.4);
+}
 .settings-nav {
   width: 140px; flex-shrink: 0;
-  background: rgba(30, 31, 35, 0.3);
+  background: rgba(30, 31, 35, 0.4);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-right: 1px solid rgba(255,255,255,0.06);
   padding: 12px 0;
+}
+.settings-content {
+  background: rgba(28, 29, 33, 0.3);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
 }
 .settings-nav-item {
   padding: 10px 20px; cursor: pointer; font-size: 0.9em;
@@ -580,10 +594,10 @@ body.light #homeStats .stat-card {
 
 /* ── @提及列表（输入框上方悬浮，伪@纯文本填充） ── */
 .mention-list {
-  position: absolute; bottom: 100%; left: 20px;  /* 宽度由 JS 按输入框宽度设置 */
+  position: absolute; bottom: 0; left: 0;  /* 相对 #chatArea；left/bottom/width 由 JS 按输入框位置设置 */
   max-height: 240px; overflow-y: auto;
-  background: rgba(28, 29, 33, 0.92);
-  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  background: rgba(28, 29, 33, 0.6);
+  backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%);
   border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 12px; padding: 6px;
   box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.3);
@@ -601,6 +615,17 @@ body.light #homeStats .stat-card {
 }
 .mention-item .mi-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .mention-item .mi-name { font-size: 0.9em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 「↓ 跳转至最新消息」悬浮按钮（absolute 相对 chatArea，bottom 由 JS 贴输入框顶部） */
+.jump-new-btn {
+  position: absolute; z-index: 90;
+  left: 0;  /* left/bottom 由 JS 精确计算（居中于输入框） */
+  padding: 6px 14px; border: none; border-radius: 999px;
+  background: var(--accent);  /* 主题色底色，深浅主题通用 */
+  color: #fff; font-size: 0.8em; cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  transition: background 0.15s;
+}
+.jump-new-btn:hover { background: var(--accent-hover); }
 /* 禁言时长滚轮选择器（滚轮滚动 / 触摸拖动 / 点击选择，无输入框） */
 .mute-wheels { display: flex; justify-content: center; gap: 10px; }
 .mute-wheel-col { display: flex; flex-direction: column; align-items: center; }
@@ -637,11 +662,19 @@ body.light #homeStats .stat-card {
 
 /* ── 群信息卡片（点击聊天头群名弹出） ─────────────── */
 .group-info-card {
-  position: absolute; top: 100%; left: 20px; margin-top: 10px;
+  /* 挂 chat-area 直属（header 有 backdrop-filter 会隔离子级 blur）；
+     定位相对 chat-area，top 落在 header 下方（header ≈ 64px 高） */
+  position: absolute; top: 66px; left: 20px;
   min-width: 340px; max-width: 460px; z-index: 60;
-  background: rgba(28, 29, 33, 0.88);
-  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  /* 玻璃质感：微渐变模拟厚度 + 顶部高光 + 底部投影；背后是纯色时 blur 无感，
+     靠渐变与高光撑出玻璃面板的观感 */
+  background: linear-gradient(160deg, rgba(52, 54, 62, 0.82) 0%, rgba(32, 34, 40, 0.70) 60%, rgba(26, 27, 32, 0.76) 100%);
+  backdrop-filter: blur(22px) saturate(140%); -webkit-backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03),
+    0 12px 32px rgba(0, 0, 0, 0.45);
   border-radius: 16px; padding: 20px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   color: var(--text);
@@ -682,11 +715,15 @@ body.light #homeStats .stat-card {
 .member-card {
   position: fixed; z-index: 200;
   min-width: 220px; max-width: 300px;
-  background: rgba(28, 29, 33, 0.85);
-  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  /* 同群卡片：渐变 + 顶部高光模拟玻璃面板（纯色背景下 blur 无感） */
+  background: linear-gradient(160deg, rgba(52, 54, 62, 0.82) 0%, rgba(32, 34, 40, 0.70) 60%, rgba(26, 27, 32, 0.76) 100%);
+  backdrop-filter: blur(22px) saturate(140%); -webkit-backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px; padding: 14px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03),
+    0 10px 30px rgba(0, 0, 0, 0.45);
   color: var(--text);
 }
 .member-card .mc-head { display: flex; align-items: center; gap: 12px; }
@@ -713,10 +750,7 @@ body.light #homeStats .stat-card {
 .header-name #chatNameInner:hover { background: rgba(255, 255, 255, 0.09); }
 /* 卡片打开：更深一档的中性背景（无彩色），区别于悬停 */
 .header-name.card-open #chatNameInner { background: rgba(255, 255, 255, 0.20); }
-/* 私聊标题：无悬停/点击高亮（不弹卡片，仅群聊可点） */
-.header-name.is-dm #chatNameInner,
-.header-name.is-dm #chatNameInner:hover,
-.header-name.is-dm #chatNameInner:active { background: transparent !important; cursor: default; }
+/* 私聊标题也可点击（弹出用户信息卡片），与群聊一致的 hover 反馈 */
 
 
 /* ── 加群申请列表项 ───────────────────────────────── */

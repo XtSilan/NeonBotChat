@@ -153,6 +153,19 @@ async def upsert_conversation(
     await asyncio.to_thread(_do)
 
 
+async def maybe_update_direct_name(conv_id: str, name: str) -> None:
+    """私聊收到消息时自动刷新会话名：仅当 user_note 为空（用户没手动备注过）时更新 name，
+    不动 user_note，这样下次仍可继续自动刷新；用户手动备注后即停止自动覆盖"""
+    def _do():
+        conn = get_db()
+        r = conn.execute("SELECT user_note FROM conversations WHERE id = ?", (conv_id,)).fetchone()
+        if r and not (r["user_note"] or "").strip():
+            conn.execute("UPDATE conversations SET name = ? WHERE id = ?", (name, conv_id))
+            conn.commit()
+        conn.close()
+    await asyncio.to_thread(_do)
+
+
 async def rename_conversation(conv_id: str, name: str) -> None:
     """强制重命名会话（用户手动设置备注）。name 同时写 user_note，显示时备注优先于官方群名"""
     def _do():
@@ -391,7 +404,7 @@ async def save_message(
         """, (conversation_id, sender_openid, sender_name, sender_avatar, content, msg_type, direction, msg_id, attachments, member_role, quoted_sender, quoted_content, quote_thumbs, ref_idx, quoted_ref_idx, now))
         msg_pk = cur.lastrowid
 
-        # 更新会话摘要
+        # 更新会话摘要（转发消息预览统一为 [聊天记录]）
         conn.execute("""
             UPDATE conversations
             SET last_message = ?,
@@ -399,13 +412,20 @@ async def save_message(
                 last_direction = ?,
                 last_message_time = julianday('now')
             WHERE id = ?
-        """, (content[:200], sender_name, direction, conversation_id))
+        """, (_conv_preview(content)[:200], sender_name, direction, conversation_id))
 
         conn.commit()
         row = conn.execute("SELECT * FROM messages WHERE id = ?", (msg_pk,)).fetchone()
         conn.close()
         return dict(row)
     return await asyncio.to_thread(_do)
+
+
+def _conv_preview(content: str) -> str:
+    """会话列表预览归一化：合并转发（聊天记录）消息统一显示为 [聊天记录]"""
+    if content and (content.startswith("[群聊的聊天记录]") or content.startswith("[好友的聊天记录]")):
+        return "[聊天记录]"
+    return content
 
 
 async def get_messages(conversation_id: str, limit: int = 50, before_id: int = 0) -> list[dict]:
@@ -504,6 +524,17 @@ async def get_stats() -> dict:
             WHERE {WEEK}
             GROUP BY h
         """).fetchall()
+        # 近 7 天「星期×小时」热力图（strftime('%w')：周日=0 … 周六=6）
+        heatmap = conn.execute(f"""
+            SELECT CAST(strftime('%w', timestamp) AS INTEGER) AS dow,
+                   CAST(strftime('%H', timestamp) AS INTEGER) AS hr,
+                   COUNT(*) AS cnt
+            FROM messages WHERE {WEEK}
+            GROUP BY dow, hr
+        """).fetchall()
+        hm = {}
+        for r in heatmap:
+            hm.setdefault(r["dow"], {})[r["hr"]] = r["cnt"]
         # 近 7 天媒体分布（attachments JSON 文本匹配）
         media = {}
         for key, pat in (
@@ -519,6 +550,14 @@ async def get_stats() -> dict:
         quoted = conn.execute(
             f"SELECT COUNT(*) AS cnt FROM messages WHERE {WEEK} AND quoted_ref_idx != ''"
         ).fetchone()["cnt"]
+        # 近 7 天发言达人 TOP5（按成员昵称聚合）
+        senders = conn.execute(f"""
+            SELECT sender_name AS name, COUNT(*) AS cnt, MAX(sender_avatar) AS avatar
+            FROM messages
+            WHERE {WEEK} AND direction = 'incoming' AND sender_name != ''
+            GROUP BY sender_name
+            ORDER BY cnt DESC LIMIT 5
+        """).fetchall()
         # 会话参与度
         total_convs = conn.execute("SELECT COUNT(*) AS cnt FROM conversations").fetchone()["cnt"]
         active_convs = conn.execute(
@@ -535,8 +574,12 @@ async def get_stats() -> dict:
                 {"name": conv_display_name(dict(r)) or r["conv_id"], "conv_id": r["conv_id"], "count": r["cnt"]}
                 for r in top
             ],
+            "top_senders": [
+                {"name": r["name"], "count": r["cnt"], "avatar": r["avatar"]} for r in senders
+            ],
             "trend": [{"d": r["d"], "count": r["cnt"]} for r in trend],
             "hourly": {r["h"]: r["cnt"] for r in hourly},
+            "heatmap": hm,
             "media": media,
             "quoted": quoted,
             "convs": {"total": total_convs, "active": active_convs},
@@ -589,7 +632,7 @@ async def delete_messages_batch(msg_ids: list[int]) -> list[int]:
             if latest:
                 conn.execute(
                     "UPDATE conversations SET last_message=?, last_sender=?, last_direction=? WHERE id=?",
-                    (latest["content"][:200], latest["sender_name"], latest["direction"], conv_id),
+                    (_conv_preview(latest["content"])[:200], latest["sender_name"], latest["direction"], conv_id),
                 )
             else:
                 conn.execute(
@@ -631,7 +674,7 @@ async def delete_message(msg_id: int) -> Optional[dict]:
         if latest:
             conn.execute(
                 "UPDATE conversations SET last_message=?, last_sender=?, last_direction=? WHERE id=?",
-                (latest["content"][:200], latest["sender_name"], latest["direction"], conv_id),
+                (_conv_preview(latest["content"])[:200], latest["sender_name"], latest["direction"], conv_id),
             )
         else:
             conn.execute(
