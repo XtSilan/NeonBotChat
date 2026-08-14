@@ -278,6 +278,13 @@ function showMemberCard(e, openid, name, avatar, isSelf, anchored = false) {
   refreshMemberCard(openid, card, avEl);
 }
 
+// 头像 URL 是否相同（img.src 是解析后的绝对 URL，后端可能返回相对路径，统一解析后比较）
+function sameAvatar(imgEl, url) {
+  if (!imgEl || !url) return false;
+  try { return imgEl.src === new URL(url, location.origin).href; }
+  catch (e) { return imgEl.src === url; }
+}
+
 // 弹出成员卡片后自动拉取该成员最新昵称/头像（后端 10 分钟缓存，不会频繁调第三方接口）；
 // 卡片仍开着才更新显示，失败静默保留旧值
 function refreshMemberCard(openid, card, avEl) {
@@ -289,13 +296,19 @@ function refreshMemberCard(openid, card, avEl) {
       $('#mcName').innerHTML = fmtBotMarker(nm);
     }
     if (r.avatar_url) {
-      avEl.innerHTML = `<img src="${escHtml(r.avatar_url)}" alt="" onerror="this.onerror=null;mcAvatarFallback()" onclick="event.stopPropagation();viewImage('${escHtml(r.avatar_url)}')">`;
+      // 新头像与原头像相同则不重写 DOM（避免无意义的重新加载/闪烁）
+      const curImg = avEl.querySelector('img');
+      if (!sameAvatar(curImg, r.avatar_url)) {
+        avEl.innerHTML = `<img src="${escHtml(r.avatar_url)}" alt="" onerror="this.onerror=null;mcAvatarFallback()" onclick="event.stopPropagation();viewImage('${escHtml(r.avatar_url)}')">`;
+      }
       // 同步更新消息列表里该成员的头像与昵称（含 dataset，后续点卡片/右键用最新值）
       const rows = document.querySelectorAll(`#messages .msg-row[data-msg-sender-openid="${CSS.escape(openid)}"]`);
       rows.forEach(row => {
-        row.dataset.msgSenderAvatar = r.avatar_url;
         const img = row.querySelector('.msg-avatar-img');
-        if (img) img.src = r.avatar_url;
+        if (!sameAvatar(img, r.avatar_url)) {
+          row.dataset.msgSenderAvatar = r.avatar_url;
+          if (img) img.src = r.avatar_url;
+        }
         if (r.name && row.dataset.msgDirection !== 'outgoing') {
           // 原名字带 🤖（机器人标记）时给新昵称补回，避免重建 meta 后 bot.svg 图标消失
           const oldName = row.dataset.msgSender || '';
