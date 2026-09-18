@@ -85,6 +85,14 @@
 - 设置 → 通用开关，浏览器系统通知
 - **@我 时强提醒**：即使正在查看该会话也会通知，通知点击直达会话
 
+### 多账号管理
+- **多账号登录**：支持同时登录多个 QQ Bot 账号
+- **账号切换**：侧边栏一键切换当前活跃账号
+- **添加账号**：浮窗式添加新账号，输入 AppID 和 Secret 即可登录
+- **账号列表**：登录页面显示已保存的账号，点击快速登录
+- **消息通知**：新消息到达时播放提示音 + 头像旁弹出气泡提醒（3秒后自动收回）
+- **账号状态**：显示每个账号的在线状态和机器人名称
+
 ### UI / 个性化
 - **SVG 图标**：全站 Lucide 风格 SVG，CSS 自动适配深浅色（含 ok / warning / favourite / bot / search 等状态图标）
 - **自定义弹窗**：毛玻璃确认弹窗，替代浏览器原生对话框
@@ -171,14 +179,31 @@ NeonBotChat/
 ├── init.py              # 主入口，启动 Bot + Web 服务
 ├── web_server.py        # FastAPI + WebSocket 后端
 ├── database.py          # SQLite 存储 + 消息去重
+├── bot_manager.py       # 多 Bot 实例管理器
 ├── PatchMsg.py          # 补丁：群消息解析 + 附件提取 + 角色识别
 ├── PatchActiveMsg.py    # 补丁：主动发送 / 撤回 / URL 上传
 ├── PatchUserInfo.py     # 补丁：获取用户昵称 / 头像
 ├── config.example.yaml  # 配置文件示例
 ├── config.yaml          # 实际配置（含密钥，不提交 Git）
 ├── README.md            # 项目文档
-├── templates/
-│   └── index.html       # WebUI 前端（零框架依赖）
+├── web/                 # WebUI 前端文件
+│   ├── index.html       # 主页面
+│   ├── login.html       # 登录页面
+│   ├── css/             # 样式文件
+│   │   ├── base.css
+│   │   ├── layout.css
+│   │   ├── components.css
+│   │   ├── light.css
+│   │   └── accounts.css # 账号相关样式
+│   ├── js/              # JavaScript 文件
+│   │   ├── core.js      # 核心逻辑
+│   │   ├── messages.js  # 消息处理
+│   │   ├── settings.js  # 设置页面
+│   │   ├── accounts.js  # 账号管理
+│   │   ├── notifications.js # 消息通知
+│   │   └── ...
+│   └── sounds/          # 提示音文件
+│       └── notification.wav
 └── file_server/         # 图床服务器（独立项目）
     ├── file_server.py
     ├── config.yaml
@@ -223,6 +248,9 @@ NeonBotChat/
 | 系统状态           | ⚙ 设置 → 状态                                 |
 | Bot 头像/简介      | ⚙ 设置 → 账号与安全                           |
 | 退出登录           | ⚙ 设置 → 账号与安全                           |
+| 添加账号           | 侧边栏 ＋ 按钮                                |
+| 切换账号           | 点击侧边栏头像 → 选择账号                     |
+| 删除账号           | 悬停账号列表 → 点击 × 按钮                    |
 
 ## ⚠️ 注意事项
 
@@ -285,6 +313,9 @@ NeonBotChat/
 - [x] 移动端长按分流（头像 / 气泡 / 空白）(v26.8.7)
 - [x] 设置「外观与显示」导航页重组（显示模式/背景/主题色）(v26.8.7)
 - [x] 群卡片/成员卡片/@列表毛玻璃 + 透明度统一调优 (v26.8.7)
+- [x] 多账号登录与管理（登录页面、账号切换、添加账号浮窗）(v26.8.8)
+- [x] 消息通知气泡（提示音 + 滑入滑出动画）(v26.8.8)
+- [x] 多账号统计支持（按账号过滤）(v26.8.8)
 
 ## 📄 License
 

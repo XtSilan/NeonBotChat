@@ -1401,6 +1401,103 @@ async def api_delete_message(msg_db_id: int):
     return JSONResponse({"error": "消息不存在"}, status_code=404)
 
 
+# ── 账号管理 API ──────────────────────────────────────────
+
+@app.post("/api/accounts/login")
+async def api_login_account(request: Request):
+    """登录账号（验证 AppID/Secret 并启动 Bot）"""
+    try:
+        body = await request.json()
+        appid = body.get("appid", "").strip()
+        secret = body.get("secret", "").strip()
+        
+        if not appid or not secret:
+            return JSONResponse({"error": "AppID 和 Secret 不能为空"}, status_code=400)
+        
+        from bot_manager import bot_manager
+        result = await bot_manager.login(appid, secret)
+        
+        if result.get("ok"):
+            return {"ok": True, "account": result.get("account")}
+        else:
+            return JSONResponse({"error": result.get("error", "登录失败")}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/accounts")
+async def api_get_accounts():
+    """获取所有已保存的账号"""
+    from database import get_all_accounts
+    accounts = await get_all_accounts()
+    
+    # 添加运行状态
+    from bot_manager import bot_manager
+    for account in accounts:
+        account["is_running"] = bot_manager.is_running(account["appid"])
+        account["is_active"] = bot_manager.get_active_appid() == account["appid"]
+    
+    return {"accounts": accounts}
+
+
+@app.delete("/api/accounts/{appid}")
+async def api_delete_account(appid: str):
+    """删除账号"""
+    from bot_manager import bot_manager
+    await bot_manager.remove(appid)
+    return {"ok": True}
+
+
+@app.post("/api/accounts/{appid}/switch")
+async def api_switch_account(appid: str):
+    """切换当前账号"""
+    from bot_manager import bot_manager
+    result = await bot_manager.switch(appid)
+    
+    if result.get("ok"):
+        return {"ok": True}
+    else:
+        return JSONResponse({"error": result.get("error", "切换失败")}, status_code=400)
+
+
+@app.get("/api/accounts/current")
+async def api_get_current_account():
+    """获取当前账号信息"""
+    from bot_manager import bot_manager
+    bot = bot_manager.get_active()
+    
+    if bot:
+        return {
+            "ok": True,
+            "account": {
+                "appid": bot.appid,
+                "bot_name": bot.bot_name,
+                "bot_avatar": bot.bot_avatar,
+                "is_running": bot.is_running,
+            }
+        }
+    else:
+        return {"ok": False, "account": None}
+
+
+@app.post("/api/accounts/add")
+async def api_add_account(request: Request):
+    """添加新账号（不登录，仅保存）"""
+    try:
+        body = await request.json()
+        appid = body.get("appid", "").strip()
+        secret = body.get("secret", "").strip()
+        
+        if not appid or not secret:
+            return JSONResponse({"error": "AppID 和 Secret 不能为空"}, status_code=400)
+        
+        from database import add_account
+        account = await add_account(appid, secret)
+        return {"ok": True, "account": account}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await manager.connect(ws)

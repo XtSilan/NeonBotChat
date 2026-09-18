@@ -52,10 +52,23 @@ def get_db() -> sqlite3.Connection:
 def init_db() -> None:
     conn = get_db()
     conn.executescript("""
+        CREATE TABLE IF NOT EXISTS accounts (
+            id TEXT PRIMARY KEY,           -- 账号ID (appid)
+            name TEXT NOT NULL DEFAULT '', -- 显示名称（自动从QQ API获取）
+            appid TEXT NOT NULL UNIQUE,
+            secret TEXT NOT NULL,
+            bot_name TEXT DEFAULT '',
+            bot_avatar TEXT DEFAULT '',
+            enabled INTEGER DEFAULT 1,
+            last_login REAL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        );
+
         CREATE TABLE IF NOT EXISTS conversations (
             id          TEXT PRIMARY KEY,          -- group_openid 或 user_openid
             name        TEXT NOT NULL DEFAULT '',  -- 群名 / 用户名
             type        TEXT NOT NULL DEFAULT 'group',  -- 'group' | 'direct'
+            account_id  TEXT DEFAULT '',           -- 所属账号 ID
             avatar_url  TEXT DEFAULT '',
             last_message TEXT DEFAULT '',
             last_sender TEXT DEFAULT '',
@@ -71,6 +84,7 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS messages (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
             conversation_id TEXT NOT NULL,
+            account_id      TEXT DEFAULT '',          -- 所属账号 ID
             sender_openid   TEXT DEFAULT '',
             sender_name     TEXT DEFAULT '',
             sender_avatar   TEXT DEFAULT '',
@@ -92,6 +106,8 @@ def init_db() -> None:
 
         CREATE INDEX IF NOT EXISTS idx_msg_conv  ON messages(conversation_id, timestamp);
         CREATE INDEX IF NOT EXISTS idx_conv_time ON conversations(last_message_time DESC);
+        CREATE INDEX IF NOT EXISTS idx_conv_account ON conversations(account_id);
+        CREATE INDEX IF NOT EXISTS idx_msg_account ON messages(account_id);
     """)
     # 迁移：旧库补新列
     cols = {r[1] for r in conn.execute("PRAGMA table_info(conversations)").fetchall()}
@@ -112,9 +128,17 @@ def init_db() -> None:
         ("proactive_msg",   "ALTER TABLE conversations ADD COLUMN proactive_msg INTEGER DEFAULT -1"),
         ("recv_setting",    "ALTER TABLE conversations ADD COLUMN recv_setting TEXT DEFAULT ''"),
         ("info_updated_at", "ALTER TABLE conversations ADD COLUMN info_updated_at REAL DEFAULT 0"),
+        # 多账号支持：account_id 字段
+        ("account_id",      "ALTER TABLE conversations ADD COLUMN account_id TEXT DEFAULT ''"),
     ):
         if col not in cols:
             conn.execute(ddl)
+    
+    # 迁移：messages 表添加 account_id 字段
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(messages)").fetchall()}
+    if "account_id" not in cols:
+        conn.execute("ALTER TABLE messages ADD COLUMN account_id TEXT DEFAULT ''")
+    
     conn.commit()
     conn.close()
 
@@ -685,3 +709,84 @@ async def delete_message(msg_id: int) -> Optional[dict]:
         conn.close()
         return deleted
     return await asyncio.to_thread(_do)
+
+
+# ── 账号操作 ──────────────────────────────────────────────
+
+async def add_account(appid: str, secret: str, bot_name: str = "", bot_avatar: str = "") -> dict:
+    """添加新账号"""
+    def _do():
+        conn = get_db()
+        # 检查是否已存在
+        existing = conn.execute("SELECT id FROM accounts WHERE appid = ?", (appid,)).fetchone()
+        if existing:
+            # 更新 secret 和登录时间
+            conn.execute(
+                "UPDATE accounts SET secret = ?, last_login = ? WHERE appid = ?",
+                (secret, _time.time(), appid)
+            )
+        else:
+            conn.execute(
+                "INSERT INTO accounts (id, name, appid, secret, bot_name, bot_avatar, last_login) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (appid, bot_name or appid, appid, secret, bot_name, bot_avatar, _time.time())
+            )
+        conn.commit()
+        # 返回账号信息
+        row = conn.execute("SELECT * FROM accounts WHERE appid = ?", (appid,)).fetchone()
+        conn.close()
+        return dict(row) if row else {"id": appid, "appid": appid}
+    return await asyncio.to_thread(_do)
+
+
+async def get_account(appid: str) -> Optional[dict]:
+    """获取单个账号"""
+    def _do():
+        conn = get_db()
+        row = conn.execute("SELECT * FROM accounts WHERE appid = ?", (appid,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+    return await asyncio.to_thread(_do)
+
+
+async def get_all_accounts() -> list[dict]:
+    """获取所有账号"""
+    def _do():
+        conn = get_db()
+        rows = conn.execute("SELECT * FROM accounts ORDER BY last_login DESC").fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    return await asyncio.to_thread(_do)
+
+
+async def delete_account(appid: str) -> bool:
+    """删除账号"""
+    def _do():
+        conn = get_db()
+        conn.execute("DELETE FROM accounts WHERE appid = ?", (appid,))
+        conn.commit()
+        conn.close()
+        return True
+    return await asyncio.to_thread(_do)
+
+
+async def update_account_info(appid: str, bot_name: str = None, bot_avatar: str = None) -> None:
+    """更新账号信息（机器人名称和头像）"""
+    def _do():
+        conn = get_db()
+        if bot_name is not None:
+            conn.execute("UPDATE accounts SET bot_name = ?, name = ? WHERE appid = ?", (bot_name, bot_name, appid))
+        if bot_avatar is not None:
+            conn.execute("UPDATE accounts SET bot_avatar = ? WHERE appid = ?", (bot_avatar, appid))
+        conn.commit()
+        conn.close()
+    await asyncio.to_thread(_do)
+
+
+async def update_account_last_login(appid: str) -> None:
+    """更新账号最后登录时间"""
+    def _do():
+        conn = get_db()
+        conn.execute("UPDATE accounts SET last_login = ? WHERE appid = ?", (_time.time(), appid))
+        conn.commit()
+        conn.close()
+    await asyncio.to_thread(_do)

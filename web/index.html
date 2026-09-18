@@ -14,6 +14,31 @@
 <body>
 <div class="chat-bg-layer" id="chatBgLayer"></div>
 
+<!-- 添加账号浮窗 -->
+<div class="modal-overlay" id="addAccountModal" style="display:none;">
+  <div class="modal-box" style="width:380px;">
+    <h3>
+      <img src="icons/add.svg" class="svg-icon" style="width:18px;height:18px;" alt="">
+      添加新账号
+    </h3>
+    <form id="addAccountForm">
+      <div class="form-group">
+        <label for="newAppid">AppID</label>
+        <input type="text" id="newAppid" placeholder="输入 QQ Bot AppID" required>
+      </div>
+      <div class="form-group">
+        <label for="newSecret">AppSecret</label>
+        <input type="password" id="newSecret" placeholder="输入 AppSecret" required>
+      </div>
+      <div id="addAccountError" class="error-message" style="display:none;"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" id="btnCancelAddAccount">取消</button>
+        <button type="submit" class="glass-btn active">登录</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <aside class="side-rail">
   <div style="display:flex;flex-direction:column;align-items:center;">
     <div id="railLogo" title="关于与帮助" style="display:flex;flex-direction:column;align-items:center;cursor:pointer;">
@@ -24,6 +49,18 @@
       <div id="railBotAvatar" title="机器人信息" style="width:40px;height:40px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:pointer;"><img src="icons/query.svg" class="svg-icon" style="width:22px;height:22px;" alt=""></div>
       <span id="railStatusDot" style="position:absolute;bottom:0;right:0;width:11px;height:11px;border-radius:50%;background:var(--online);border:2px solid #141519;z-index:2;"></span>
     </div>
+    
+    <!-- 添加账号按钮 -->
+    <button class="rail-btn" id="btnAddAccount" title="添加账号" 
+            style="margin-top:8px;width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;">
+      <img src="icons/add.svg" class="svg-icon" style="width:14px;height:14px;" alt="">
+    </button>
+    
+    <!-- 账号切换下拉 -->
+    <div class="account-switcher" id="accountSwitcher" style="display:none;">
+      <!-- 动态生成 -->
+    </div>
+    
     <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:16px;">
       <button class="rail-btn" id="railHomeBtn" title="主页"><img src="icons/home.svg" class="svg-icon" style="width:18px;height:18px;" alt=""></button>
       <button class="rail-btn" id="railMsgBtn" title="消息"><img src="icons/message.svg" class="svg-icon" style="width:18px;height:18px;" alt=""></button>
@@ -534,5 +571,30 @@
 <script src="js/lightbox.js?v=26.8.7"></script>
 <script src="js/contextmenu.js?v=26.8.7"></script>
 <script src="js/settings.js?v=26.8.7"></script>
+<script src="js/accounts.js?v=26.8.7"></script>
+<script src="js/notifications.js?v=26.8.7"></script>
+<script>
+  // 初始化账号管理器
+  document.addEventListener('DOMContentLoaded', () => {
+    accountManager.init();
+    accountManager.getCurrentAccount();
+    
+    // 绑定添加账号浮窗事件
+    const addAccountForm = document.getElementById('addAccountForm');
+    if (addAccountForm) {
+      addAccountForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        accountManager.addAccount();
+      });
+    }
+    
+    const btnCancelAddAccount = document.getElementById('btnCancelAddAccount');
+    if (btnCancelAddAccount) {
+      btnCancelAddAccount.addEventListener('click', () => {
+        accountManager.hideAddAccountModal();
+      });
+    }
+  });
+</script>
 </body>
 </html>

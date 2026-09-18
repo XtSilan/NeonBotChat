@@ -594,11 +594,31 @@ async def main():
     init_db()
     _log.info("[NeonBot] 数据库就绪 ✓")
 
-    # 2) 启动 bot 线程
-    _log.info(f"[NeonBot] 启动 Bot (AppID={APP_ID})…")
-    bot_thread = threading.Thread(target=run_bot, name="qqbot", daemon=True)
-    bot_thread.start()
-    _log.info("[NeonBot] Bot 线程已启动 ✓")
+    # 2) 启动 bot（支持多账号）
+    from bot_manager import bot_manager
+    
+    # 检查是否有已保存的账号
+    from database import get_all_accounts
+    accounts = await get_all_accounts()
+    
+    if accounts:
+        # 启动所有已保存的账号
+        _log.info(f"[NeonBot] 发现 {len(accounts)} 个已保存的账号，正在启动…")
+        await bot_manager.start_all_saved()
+        
+        # 设置第一个运行的账号为活跃账号
+        for account in accounts:
+            if bot_manager.is_running(account["appid"]):
+                await bot_manager.switch(account["appid"])
+                break
+    else:
+        # 没有已保存的账号，使用配置文件中的账号
+        _log.info(f"[NeonBot] 启动默认 Bot (AppID={APP_ID})…")
+        result = await bot_manager.login(APP_ID, CLIENT_SECRET)
+        if result.get("ok"):
+            _log.info("[NeonBot] 默认 Bot 启动成功 ✓")
+        else:
+            _log.warning(f"[NeonBot] 默认 Bot 启动失败: {result.get('error')}")
 
     # 3) 启动消息泵（后台任务，转发 bot 消息到 WebSocket）
     asyncio.create_task(pump_bot_messages())
