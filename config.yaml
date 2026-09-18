@@ -1,0 +1,15 @@
+# NeonBotChat 配置文件
+# 复制为 config.yaml 并填入真实值
+
+appid: "1905471052"
+secret: "xCSj0IbuEZuGd0OmBb1SuMpImHnJqOwV"
+webui-port: 8082          # WebUI 端口，默认 8080
+enable-public: true       # true = 0.0.0.0 允许外网访问
+webui-password: ""         # 访问密码，留空则不启用密码保护
+developerMode: False        # True 启用开发者模式（显示自定义消息等）
+
+# ── 图床服务器连接（可选，用于富媒体发送）──
+# 图床本身的完整配置在 file_server/config.yaml
+file-server:
+  public-url: "http://192.168.100.110:8081"
+  token: "123456789@@@"
