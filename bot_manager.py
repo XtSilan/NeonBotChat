@@ -245,7 +245,12 @@ class MyClient(botpy.Client):
         bot = self.bot_manager.get_bot(self.appid)
         if bot:
             bot.bot_name = self.robot.name
-            await update_account_info(self.appid, bot_name=self.robot.name)
+            bot.bot_avatar = getattr(self.robot, "avatar", "") or ""
+            await update_account_info(
+                self.appid,
+                bot_name=self.robot.name,
+                bot_avatar=bot.bot_avatar,
+            )
             if self.bot_manager.get_active_appid() == self.appid:
                 self.bot_manager._activate_credentials(bot)
         _log.info(f"🤖 robot 「{self.robot.name}」 (appid={self.appid}) on_ready!")

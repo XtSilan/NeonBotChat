@@ -677,6 +677,12 @@ $('#aboutBtn').addEventListener('click', () => {
   syncBgUI();
   openSettings();
 });
+$('#btnManageRobotsSettings')?.addEventListener('click', () => {
+  if (window.accountManager) window.accountManager.toggleRobotList(true);
+});
+$('#btnAddRobotSettings')?.addEventListener('click', () => {
+  if (window.accountManager) window.accountManager.showAddAccountModal();
+});
 $settingsModal.addEventListener('click', (e) => {
   if (e.target === $settingsModal) {
     closeSettings();
@@ -1065,7 +1071,10 @@ $('#bioInput').addEventListener('keydown', (e) => {
 });
 
 // ── Bot 头像 ─────────────────────────────────────────
-function getBotAvatar() { return serverSettings.avatar || ''; }
+function getBotAvatar() {
+  // 消息页头像必须跟随当前选中的机器人，不能继续使用全局 settings.avatar 缓存。
+  return window.accountManager?.currentAccount?.bot_avatar || serverSettings.avatar || '';
+}
 function applyBotAvatar() {
   const av = getBotAvatar();
   if (av) {

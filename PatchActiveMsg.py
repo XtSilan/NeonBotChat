@@ -17,18 +17,21 @@ import asyncio
 import time
 import random
 import json
+import base64
 import aiohttp
 from typing import Optional
 from botpy import logging
 import os
 
 from botpy.ext.cog_yaml import read
-config = read(os.path.join(os.path.dirname(__file__), "config.yaml"))
+_config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
+config = read(_config_path) if os.path.isfile(_config_path) else {}
+config = config or {}
 _log=logging.get_logger("PatchActiveMsg")
 
 # ================== 硬编码配置 ==================
-APP_ID = config["appid"]
-CLIENT_SECRET = config["secret"]
+APP_ID = config.get("appid", "")
+CLIENT_SECRET = config.get("secret", "")
 
 BASE_URL = "https://api.sgroup.qq.com"  # 注意不要以 / 结尾
 TOKEN_URL = "https://bots.qq.com"
@@ -496,7 +499,7 @@ async def _upload_media_bytes(
     srv_send_msg: bool = False,
     file_name: str = "",
 ) -> dict:
-    """使用 multipart 二进制上传，避免 QQ 云端回抓不可达的私网 URL。"""
+    """使用 file_data Base64 上传，避免 QQ 云端回抓不可达的私网 URL。"""
     if file_type not in MEDIA_TYPE:
         raise ValueError(f"file_type 必须是 {list(MEDIA_TYPE.keys())}，收到: {file_type}")
     if not media_bytes:
@@ -506,27 +509,26 @@ async def _upload_media_bytes(
     headers = {"Authorization": f"{AUTH_TYPE} {token}"}
     suffix = {"image": ".png", "voice": ".wav", "video": ".mp4", "file": ".bin"}.get(file_type, ".bin")
     upload_name = file_name or f"media{suffix}"
-    form = aiohttp.FormData()
-    form.add_field("file_type", str(MEDIA_TYPE[file_type]))
-    if srv_send_msg:
-        form.add_field("srv_send_msg", "true")
-    form.add_field(
-        "file",
-        media_bytes,
-        filename=upload_name,
-        content_type=_MEDIA_CONTENT_TYPE.get(file_type, "application/octet-stream"),
-    )
+    # QQ Bot v2 的富媒体接口接收 JSON + file_data（Base64），不是 multipart。
+    # multipart 会被接口当成缺少文件 URL，最终返回 40093007「富媒体文件下载失败」。
+    payload = {
+        "file_type": MEDIA_TYPE[file_type],
+        "file_data": base64.b64encode(media_bytes).decode("ascii"),
+        "srv_send_msg": srv_send_msg,
+        "file_name": upload_name,
+    }
+    headers["Content-Type"] = "application/json"
 
     async with aiohttp.ClientSession() as session:
-        async with session.post(endpoint, headers=headers, data=form) as resp:
+        async with session.post(endpoint, headers=headers, json=payload) as resp:
             text = await resp.text()
             try:
                 result = json.loads(text) if text else {}
             except json.JSONDecodeError:
                 result = {"raw": text}
             if resp.status != 200:
-                _log.error(f"📤 multipart富媒体上传失败 ({resp.status}): {text}")
-                raise RuntimeError(f"multipart富媒体上传失败: {text}")
+                _log.error(f"📤 file_data富媒体上传失败 ({resp.status}): {text}")
+                raise RuntimeError(f"file_data富媒体上传失败: {text}")
             if srv_send_msg:
                 return result
             file_info = result.get("file_info")
@@ -542,10 +544,10 @@ async def upload_c2c_media_bytes(
     srv_send_msg: bool = False,
     file_name: str = "",
 ) -> dict:
-    """使用 multipart 二进制上传富媒体到 C2C 私聊。"""
+    """使用 file_data Base64 上传富媒体到 C2C 私聊。"""
     endpoint = f"{BASE_URL}/v2/users/{user_openid}/files"
     result = await _upload_media_bytes(endpoint, media_bytes, file_type, srv_send_msg, file_name)
-    _log.info(f"📤 C2C multipart上传成功 file_type={file_type} bytes={len(media_bytes)}")
+    _log.info(f"📤 C2C file_data上传成功 file_type={file_type} bytes={len(media_bytes)}")
     return result
 
 
@@ -556,10 +558,10 @@ async def upload_group_media_bytes(
     srv_send_msg: bool = False,
     file_name: str = "",
 ) -> dict:
-    """使用 multipart 二进制上传富媒体到群聊。"""
+    """使用 file_data Base64 上传富媒体到群聊。"""
     endpoint = f"{BASE_URL}/v2/groups/{group_openid}/files"
     result = await _upload_media_bytes(endpoint, media_bytes, file_type, srv_send_msg, file_name)
-    _log.info(f"📤 群 multipart上传成功 file_type={file_type} bytes={len(media_bytes)}")
+    _log.info(f"📤 群 file_data上传成功 file_type={file_type} bytes={len(media_bytes)}")
     return result
 
 

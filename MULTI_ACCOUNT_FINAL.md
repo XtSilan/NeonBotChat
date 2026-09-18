@@ -16,8 +16,12 @@
 - 主动发送凭据随账号切换，访问令牌缓存按账号重置，避免复用其他账号令牌。
 - 账号 API 不再向浏览器返回 Secret。
 - 使用 `uvicorn[standard]` 提供 WebSocket 协议实现，消除 unsupported upgrade / missing WebSocket library 告警。
-- 图床发送先清理 Markdown 包裹链接，再由本机下载文件并用 multipart 二进制上传 QQ，绕过 `192.168.x.x` 等私网地址无法被 QQ 云端回抓的问题。
-- 图床失败时返回本机下载或 QQ multipart 上传的明确错误，不再把不可达 URL 直接交给 QQ URL 上传接口。
+- 图床发送先清理 Markdown 包裹链接，再由本机下载文件并用 `file_data` Base64 JSON 上传 QQ，绕过 `192.168.x.x` 等私网地址无法被 QQ 云端回抓的问题。
+- 图床失败时返回本机下载或 QQ `file_data` 上传的明确错误，不再把不可达 URL 直接交给 QQ URL 上传接口。
+- 机器人账号支持在侧栏列表中切换、编辑显示名称和删除；头像点击只进入该账号聊天，不再跳设置。
+- AppID / AppSecret 不再强制写入主 `config.yaml`，可从 WebUI 机器人管理入口添加，配置文件可只保留 WebUI 端口及图床连接。
+- 当前账号的机器人头像从 Bot 实例和账号库同步，消息页头像跟随当前选中账号，避免 Slan 账号显示成其他机器人。
+- 富媒体改为 QQ API 的 `file_data` Base64 JSON 上传，彻底移除对 QQ 云端访问私网图床 URL 的依赖。
 
 ## 验证
 

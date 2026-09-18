@@ -494,6 +494,18 @@ async def api_bot_info():
     from PatchActiveMsg import get_bot_info
     info = await get_bot_info()
     avatar = (info or {}).get("avatar") or ""
+    username = (info or {}).get("username") or ""
+    active_appid = _active_account_id()
+    if active_appid and (avatar or username):
+        from database import update_account_info
+        await update_account_info(active_appid, bot_name=username or None, bot_avatar=avatar or None)
+        from bot_manager import bot_manager
+        active_bot = bot_manager.get_active()
+        if active_bot:
+            if username:
+                active_bot.bot_name = username
+            if avatar:
+                active_bot.bot_avatar = avatar
     if avatar:
         data = _load_settings()
         if data.get("avatar") != avatar:
@@ -501,7 +513,7 @@ async def api_bot_info():
             _save_settings(data)
     else:
         avatar = (_load_settings().get("avatar") or "")  # 接口失败回退旧缓存
-    return {"ok": True, "username": (info or {}).get("username") or "", "avatar": avatar}
+    return {"ok": True, "username": username, "avatar": avatar}
 
 
 @app.get("/api/link-preview")
@@ -1544,6 +1556,33 @@ async def api_delete_account(appid: str):
     return {"ok": True}
 
 
+@app.patch("/api/accounts/{appid}")
+async def api_update_account(appid: str, request: Request):
+    """编辑机器人显示名称；凭据仍由账号登录接口管理。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid json"}, status_code=400)
+    bot_name = str(body.get("bot_name", "")).strip()
+    if not bot_name:
+        return JSONResponse({"error": "机器人名称不能为空"}, status_code=400)
+    from database import get_account, update_account_info
+    account = await get_account(appid)
+    if not account:
+        return JSONResponse({"error": "账号不存在"}, status_code=404)
+    await update_account_info(appid, bot_name=bot_name)
+    from bot_manager import bot_manager
+    bot = bot_manager.get_bot(appid)
+    if bot:
+        bot.bot_name = bot_name
+        if bot_manager.get_active_appid() == appid:
+            import database as _db
+            _db.bot_name = bot_name
+    account["bot_name"] = bot_name
+    account["name"] = bot_name
+    return {"ok": True, "account": _public_account(account)}
+
+
 @app.post("/api/accounts/{appid}/switch")
 async def api_switch_account(appid: str):
     """切换当前账号"""
@@ -1563,12 +1602,14 @@ async def api_get_current_account():
     bot = bot_manager.get_active()
     
     if bot:
+        from database import get_account
+        saved = await get_account(bot.appid) or {}
         return {
             "ok": True,
             "account": {
                 "appid": bot.appid,
-                "bot_name": bot.bot_name,
-                "bot_avatar": bot.bot_avatar,
+                "bot_name": bot.bot_name or saved.get("bot_name") or bot.appid,
+                "bot_avatar": bot.bot_avatar or saved.get("bot_avatar") or "",
                 "is_running": bot.is_running,
             }
         }

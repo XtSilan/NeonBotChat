@@ -138,6 +138,7 @@ class AccountManager {
       const data = await accountJson(await fetch('/api/accounts'));
       this.accounts = data.accounts || [];
       this.renderAccountSwitcher();
+      this.renderRobotList();
       this.updateCurrentAccountUI();
     } catch (error) {
       console.error('加载账号失败:', error);
@@ -154,6 +155,7 @@ class AccountManager {
         localStorage.removeItem('neonbot_active_account');
       }
       this.renderAccountSwitcher();
+      this.renderRobotList();
       this.updateCurrentAccountUI();
     } catch (error) {
       console.error('获取当前账号失败:', error);
@@ -217,6 +219,52 @@ class AccountManager {
     });
   }
 
+  renderRobotList() {
+    const container = document.getElementById('robotListItems');
+    if (!container) return;
+    const activeId = this.getCurrentAccountId();
+    if (!this.accounts.length) {
+      container.innerHTML = '<div class="robot-list-empty">暂无机器人，请先添加账号</div>';
+      return;
+    }
+    container.innerHTML = this.accounts.map(account => `
+      <div class="robot-list-item ${account.appid === activeId ? 'active' : ''}" data-appid="${accountEscape(account.appid)}" role="button" tabindex="0">
+        ${accountAvatar(account)}
+        <div class="robot-info">
+          <div class="robot-name">${accountEscape(account.bot_name || account.appid)}</div>
+          <div class="robot-meta">${accountEscape(account.appid)} · ${account.is_running ? '运行中' : '未运行'}</div>
+        </div>
+        <div class="robot-list-actions">
+          <button type="button" class="robot-list-action" data-action="edit" data-appid="${accountEscape(account.appid)}" title="编辑名称" aria-label="编辑名称">✎</button>
+          <button type="button" class="robot-list-action danger" data-action="delete" data-appid="${accountEscape(account.appid)}" title="删除机器人" aria-label="删除机器人">×</button>
+        </div>
+      </div>
+    `).join('');
+
+    container.querySelectorAll('.robot-list-item').forEach(item => {
+      const activate = event => {
+        if (event.target.closest('.robot-list-action')) return;
+        if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) return;
+        event.preventDefault();
+        this.switchAccount(item.dataset.appid);
+      };
+      item.addEventListener('click', activate);
+      item.addEventListener('keydown', activate);
+    });
+    container.querySelectorAll('[data-action="edit"]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        this.renameAccount(button.dataset.appid);
+      });
+    });
+    container.querySelectorAll('[data-action="delete"]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        this.removeAccount(button.dataset.appid);
+      });
+    });
+  }
+
   async switchAccount(appid, conversationId = '') {
     try {
       if (appid !== this.getCurrentAccountId()) {
@@ -250,6 +298,7 @@ class AccountManager {
     if (!confirmed) return;
     try {
       await accountJson(await fetch(`/api/accounts/${encodeURIComponent(appid)}`, { method: 'DELETE' }));
+      this.toggleRobotList(false);
       await this.loadAccounts();
       if (!this.accounts.length) {
         window.location.href = '/login';
@@ -262,12 +311,47 @@ class AccountManager {
     }
   }
 
+  async renameAccount(appid) {
+    const account = this.accounts.find(item => item.appid === appid);
+    if (!account) return;
+    const result = typeof showConfirm === 'function'
+      ? await showConfirm(`编辑「${account.bot_name || appid}」的显示名称`, 'settings', false, true, '', '', '', account.bot_name || appid)
+      : window.prompt('机器人名称', account.bot_name || appid);
+    const nextName = typeof result === 'string' ? result.trim() : (result && result.action ? result.reason.trim() : '');
+    if (!nextName || nextName === (account.bot_name || appid)) return;
+    try {
+      await accountJson(await fetch(`/api/accounts/${encodeURIComponent(appid)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bot_name: nextName }),
+      }));
+      await this.loadAccounts();
+      await this.getCurrentAccount();
+      if (typeof showToast === 'function') showToast('✓ 机器人名称已更新');
+    } catch (error) {
+      if (typeof showToast === 'function') showToast(`⚠ ${error.message}`);
+    }
+  }
+
+  toggleRobotList(show) {
+    const panel = document.getElementById('robotListPanel');
+    const button = document.getElementById('btnRobotList');
+    if (!panel) return;
+    const next = show === undefined ? !panel.classList.contains('show') : !!show;
+    panel.classList.toggle('show', next);
+    panel.setAttribute('aria-hidden', next ? 'false' : 'true');
+    if (button) button.setAttribute('aria-expanded', next ? 'true' : 'false');
+  }
+
   bindEvents() {
     if (this.eventsBound) return;
     this.eventsBound = true;
     const avatar = document.getElementById('railBotAvatar');
     const mobileAvatar = document.getElementById('mobileBotAvatar');
     const add = document.getElementById('btnAddAccount');
+    const robotList = document.getElementById('btnRobotList');
+    const robotListClose = document.getElementById('btnCloseRobotList');
+    const robotListAdd = document.getElementById('btnRobotListAdd');
     const modal = document.getElementById('addAccountModal');
     const cancel = document.getElementById('btnCancelAddAccount');
     const form = document.getElementById('addAccountForm');
@@ -280,6 +364,15 @@ class AccountManager {
       if (active) this.switchAccount(active.appid);
     });
     if (add) add.addEventListener('click', () => this.showAddAccountModal());
+    if (robotList) robotList.addEventListener('click', event => {
+      event.stopPropagation();
+      this.toggleRobotList();
+    });
+    if (robotListClose) robotListClose.addEventListener('click', () => this.toggleRobotList(false));
+    if (robotListAdd) robotListAdd.addEventListener('click', () => {
+      this.toggleRobotList(false);
+      this.showAddAccountModal();
+    });
     if (cancel) cancel.addEventListener('click', () => this.hideAddAccountModal());
     if (form) form.addEventListener('submit', event => {
       event.preventDefault();
@@ -288,9 +381,17 @@ class AccountManager {
     if (modal) modal.addEventListener('click', event => {
       if (event.target === modal) this.hideAddAccountModal();
     });
+    document.addEventListener('click', event => {
+      const panel = document.getElementById('robotListPanel');
+      const button = document.getElementById('btnRobotList');
+      if (panel?.classList.contains('show') && !panel.contains(event.target) && !button?.contains(event.target)) {
+        this.toggleRobotList(false);
+      }
+    });
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape') {
         this.hideAddAccountModal();
+        this.toggleRobotList(false);
       }
     });
   }

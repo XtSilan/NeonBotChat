@@ -59,6 +59,18 @@
     <button class="rail-btn account-add-btn" id="btnAddAccount" title="添加账号" aria-label="添加账号">
       <span aria-hidden="true">+</span>
     </button>
+
+    <button class="rail-btn" id="btnRobotList" title="机器人列表" aria-label="机器人列表" aria-expanded="false">
+      <img src="icons/bot.svg" class="svg-icon" style="width:18px;height:18px;" alt="">
+    </button>
+    <div class="robot-list-panel" id="robotListPanel" aria-hidden="true">
+      <div class="robot-list-header">
+        <span>机器人列表</span>
+        <button type="button" class="robot-list-close" id="btnCloseRobotList" aria-label="关闭">×</button>
+      </div>
+      <div class="robot-list-items" id="robotListItems"></div>
+      <button type="button" class="robot-list-add" id="btnRobotListAdd">+ 添加机器人</button>
+    </div>
     
     <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:16px;">
       <button class="rail-btn" id="railHomeBtn" title="主页"><img src="icons/home.svg" class="svg-icon" style="width:18px;height:18px;" alt=""></button>
@@ -370,6 +382,13 @@
             <div class="bio-field" id="bioDisplay" style="font-size:0.85em;color:var(--text-dim);cursor:pointer;margin-top:2px;"></div>
             <input type="text" id="bioInput" style="display:none;font-size:0.85em;padding:4px 8px;border-radius:6px;border:1px solid var(--accent);background:var(--bg);color:var(--text);outline:none;width:100%;margin-top:2px;" placeholder="写一句简介…" maxlength="50">
           </div>
+        </div>
+        <hr style="border-color:var(--border);margin:16px 0;">
+        <h3><img src="icons/bot.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 机器人账号</h3>
+        <p style="font-size:0.8em;color:var(--text-dim);margin:8px 0 10px;">AppID 和 AppSecret 保存在本机账号库，配置文件只需要保留 WebUI 端口即可。</p>
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <button class="glass-btn" id="btnManageRobotsSettings"><img src="icons/bot.svg" class="svg-icon" style="width:16px;height:16px;" alt=""> 管理机器人</button>
+          <button class="glass-btn active" id="btnAddRobotSettings"><span aria-hidden="true">＋</span> 添加机器人</button>
         </div>
         <hr style="border-color:var(--border);margin:16px 0;">
         <h3><img src="icons/security.svg" class="svg-icon" style="width:18px;height:18px;" alt=""> 安全</h3>

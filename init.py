@@ -49,9 +49,11 @@ if not os.path.isfile(_config_path):
     if os.path.isfile(_alt):
         _config_path = _alt
 
-config = read(_config_path)
-APP_ID = config["appid"]
-CLIENT_SECRET = config["secret"]
+config = read(_config_path) if os.path.isfile(_config_path) else {}
+config = config or {}
+# AppID / Secret 可在 WebUI 账号管理中配置；YAML 只保留端口等启动参数也能启动。
+APP_ID = config.get("appid", "")
+CLIENT_SECRET = config.get("secret", "")
 
 _log = botpy_logging.get_logger("NeonBotChat")
 

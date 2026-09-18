@@ -1,8 +1,7 @@
 # NeonBotChat 配置文件
 # 复制为 config.yaml 并填入真实值
 
-appid: "1905471052"
-secret: "xCSj0IbuEZuGd0OmBb1SuMpImHnJqOwV"
+# AppID / AppSecret 已迁移到 WebUI 的机器人账号库；这里不再保存机器人凭据。
 webui-port: 8082          # WebUI 端口，默认 8080
 enable-public: true       # true = 0.0.0.0 允许外网访问
 webui-password: ""         # 访问密码，留空则不启用密码保护
