@@ -106,8 +106,6 @@ def init_db() -> None:
 
         CREATE INDEX IF NOT EXISTS idx_msg_conv  ON messages(conversation_id, timestamp);
         CREATE INDEX IF NOT EXISTS idx_conv_time ON conversations(last_message_time DESC);
-        CREATE INDEX IF NOT EXISTS idx_conv_account ON conversations(account_id);
-        CREATE INDEX IF NOT EXISTS idx_msg_account ON messages(account_id);
     """)
     # 迁移：旧库补新列
     cols = {r[1] for r in conn.execute("PRAGMA table_info(conversations)").fetchall()}
@@ -138,6 +136,10 @@ def init_db() -> None:
     cols = {r[1] for r in conn.execute("PRAGMA table_info(messages)").fetchall()}
     if "account_id" not in cols:
         conn.execute("ALTER TABLE messages ADD COLUMN account_id TEXT DEFAULT ''")
+    
+    # 创建 account_id 索引（在字段添加之后）
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_account ON conversations(account_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_msg_account ON messages(account_id)")
     
     conn.commit()
     conn.close()
