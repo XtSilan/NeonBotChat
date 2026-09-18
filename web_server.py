@@ -6,6 +6,8 @@ import asyncio
 import json
 import queue
 import os
+import re
+import html
 import time as _time
 from typing import Optional
 
@@ -14,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 import aiohttp
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 
 from database import (
     init_db, get_conversations, get_conversation, get_messages, get_recent_messages,
@@ -177,6 +179,45 @@ async def _upload_by_type(conv_id, file_url, file_type="image", srv_send_msg=Fal
                                            srv_send_msg=srv_send_msg, file_name=file_name)
 
 
+def _normalize_media_url(value: str) -> str:
+    """兼容前端/历史数据中的 Markdown 链接，返回可请求的裸 URL。"""
+    value = html.unescape(str(value or "").strip())
+    match = re.fullmatch(r"\[[^\]]*\]\((https?://[^)]+)\)", value, flags=re.IGNORECASE | re.DOTALL)
+    if match:
+        value = match.group(1).strip()
+    if value.startswith("<") and value.endswith(">"):
+        value = value[1:-1].strip()
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("图床返回的链接不是有效的 HTTP(S) 地址")
+    return value
+
+
+async def _download_media_bytes(file_url: str) -> bytes:
+    """由本机下载图床文件，避免 QQ 云端访问不到私有局域网地址。"""
+    timeout = aiohttp.ClientTimeout(total=120, connect=15, sock_read=120)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(file_url) as resp:
+            if resp.status != 200:
+                detail = (await resp.text())[:240]
+                raise RuntimeError(f"本机无法读取图床文件 ({resp.status}): {detail}")
+            data = await resp.read()
+            if not data:
+                raise RuntimeError("图床返回空文件")
+            return data
+
+
+async def _upload_bytes_by_type(conv_id, media_bytes, file_type="image", srv_send_msg=False, file_name=""):
+    from database import get_conversation
+    from PatchActiveMsg import upload_c2c_media_bytes, upload_group_media_bytes
+    conv = await get_conversation(conv_id)
+    if conv and conv.get("type") == "direct":
+        return await upload_c2c_media_bytes(conv_id, media_bytes, file_type=file_type,
+                                             srv_send_msg=srv_send_msg, file_name=file_name)
+    return await upload_group_media_bytes(conv_id, media_bytes, file_type=file_type,
+                                          srv_send_msg=srv_send_msg, file_name=file_name)
+
+
 # ── API 路由 ────────────────────────────────────────────
 
 @app.post("/api/logout")
@@ -325,20 +366,28 @@ async def api_send_media(request: Request):
     except Exception:
         return JSONResponse({"error": "invalid json"}, status_code=400)
 
-    file_url = body.get("url", "")
+    raw_file_url = body.get("url", "")
     conv_id = body.get("conv_id", "")
     file_type = body.get("file_type", "image")
     file_name = body.get("file_name", "")
-    if not file_url or not conv_id:
+    if not raw_file_url or not conv_id:
         return JSONResponse({"error": "缺少 url 或 conv_id"}, status_code=400)
+
+    try:
+        file_url = _normalize_media_url(raw_file_url)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
 
     from botpy import logging as _blog
     _log = _blog.get_logger("NeonBotChat")
-    _log.info(f"📤 [send-media] 图床链接: {file_url}  → 群: {conv_id}")
+    _log.info(f"📤 [send-media] 图床链接: {file_url}  → 会话: {conv_id}")
 
     # 分步发送：1) 上传拿 file_info  2) 发送富媒体消息（获取消息 id / ref_idx 入库）
     try:
-        up_result = await _upload_by_type(conv_id, file_url, file_type=file_type, srv_send_msg=False, file_name=file_name)
+        media_bytes = await _download_media_bytes(file_url)
+        up_result = await _upload_bytes_by_type(
+            conv_id, media_bytes, file_type=file_type, srv_send_msg=False, file_name=file_name
+        )
         file_info = up_result.get("file_info", "") if isinstance(up_result, dict) else ""
         if not file_info:
             return JSONResponse({"error": "上传失败：未返回 file_info"}, status_code=400)

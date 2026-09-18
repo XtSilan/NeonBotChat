@@ -268,54 +268,51 @@
   margin-top: 8px;
 }
 
-/* 账号切换下拉 */
+/* 账号头像栈：首个账号固定在上方，其余账号依次向下排列 */
 .account-switcher {
-  position: absolute;
-  left: 60px;
-  top: 100px;
-  background: var(--surface, #1e1f23);
-  border-radius: 12px;
-  padding: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  z-index: 100;
-  min-width: 200px;
-  border: 1px solid var(--border, #3e3f44);
-  display: none;
-  width: 240px;
-  max-height: min(420px, calc(100vh - 120px));
+  position: static;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  width: 40px;
+  max-height: min(420px, calc(100vh - 180px));
+  padding-top: 8px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
-.account-switcher.show { display: block; animation: accountMenuIn 0.16s ease-out; }
-
-.account-switcher-title {
-  padding: 5px 8px 8px;
-  color: var(--text-dim);
-  font-size: 0.72em;
-}
+.account-switcher::-webkit-scrollbar { width: 0; height: 0; }
+.account-switcher-title { display: none; }
 
 .account-switch-item {
+  width: 40px;
+  height: 40px;
+  padding: 2px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px;
-  border-radius: 8px;
+  justify-content: center;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
 }
 
 .account-switch-item:hover {
-  background: var(--hover, #3a3b3f);
+  background: rgba(148, 150, 155, 0.16);
+  transform: translateY(-1px);
 }
 
 .account-switch-item.active {
-  background: var(--accent-bg, rgba(88, 101, 242, 0.1));
-  border: 1px solid var(--accent, #5865f2);
+  border-color: var(--accent, #5865f2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #5865f2) 24%, transparent);
 }
 
 .account-switch-item .avatar {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: var(--accent, #5865f2);
   display: flex;
@@ -324,50 +321,8 @@
   overflow: hidden;
 }
 
-.account-switch-item .info {
-  flex: 1;
-}
-
-.account-switch-item .name {
-  font-weight: 600;
-  font-size: 0.9em;
-  color: var(--text, #e4e5e7);
-}
-
-.account-switch-item .status {
-  font-size: 0.75em;
-  color: var(--text-dim, #8e8f93);
-}
-
-.account-switch-item .status i {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-right: 5px;
-  border-radius: 50%;
-  background: var(--text-dim);
-}
-
-.account-switch-item .status i.online { background: var(--online); }
-
-.account-switch-item .remove-btn {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--danger, #ed4245);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.2s;
-  border: none;
-  color: white;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.account-switch-item:hover .remove-btn {
-  opacity: 1;
+#railBotAvatar.active {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #5865f2) 72%, transparent);
 }
 
 /* 添加账号按钮 */
@@ -397,13 +352,7 @@
 #railBotAvatar > img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
 .account-avatar-fallback { font-size: 0.95em; font-weight: 700; color: var(--text); }
 
-@keyframes accountMenuIn {
-  from { opacity: 0; transform: translateX(-6px) scale(0.98); }
-  to { opacity: 1; transform: translateX(0) scale(1); }
-}
-
-body.light .login-container,
-body.light .account-switcher {
+body.light .login-container {
   background: rgba(240, 241, 244, 0.82);
   border-color: rgba(0,0,0,0.1);
 }
@@ -603,13 +552,6 @@ body.light .account-notification-bubble {
     max-width: 100%;
   }
   
-  .account-switcher {
-    left: 10px;
-    right: 10px;
-    top: 80px;
-    min-width: auto;
-  }
-
   .account-notification-container { top: 68px; left: 10px; right: 10px; }
   .account-notification-bubble { width: 100%; }
 }

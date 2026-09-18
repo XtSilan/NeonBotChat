@@ -121,7 +121,6 @@ class AccountManager {
   constructor() {
     this.accounts = [];
     this.currentAccount = null;
-    this.switcherVisible = false;
     this.eventsBound = false;
   }
 
@@ -139,6 +138,7 @@ class AccountManager {
       const data = await accountJson(await fetch('/api/accounts'));
       this.accounts = data.accounts || [];
       this.renderAccountSwitcher();
+      this.updateCurrentAccountUI();
     } catch (error) {
       console.error('加载账号失败:', error);
     }
@@ -153,6 +153,7 @@ class AccountManager {
       } else {
         localStorage.removeItem('neonbot_active_account');
       }
+      this.renderAccountSwitcher();
       this.updateCurrentAccountUI();
     } catch (error) {
       console.error('获取当前账号失败:', error);
@@ -160,24 +161,33 @@ class AccountManager {
   }
 
   updateCurrentAccountUI() {
-    if (!this.currentAccount) return;
-    const account = this.accounts.find(item => item.appid === this.currentAccount.appid) || this.currentAccount;
+    const primary = this.accounts[0] || this.currentAccount;
+    const active = this.currentAccount || primary;
+    if (!primary && !active) return;
     const avatar = document.getElementById('railBotAvatar');
     const mobileAvatar = document.getElementById('mobileBotAvatarImg');
     const name = document.getElementById('mobileBotName');
     const status = document.getElementById('railStatusDot');
     const mobileStatus = document.getElementById('mobileStatusDot');
-    if (avatar) {
-      avatar.innerHTML = account.bot_avatar
-        ? `<img src="${accountEscape(account.bot_avatar)}" alt="${accountEscape(account.bot_name || 'Bot')}">`
-        : `<span class="account-avatar-fallback">${accountEscape([...(account.bot_name || account.appid || '?')][0])}</span>`;
-      avatar.title = `${account.bot_name || account.appid} · 点击切换账号`;
+    if (avatar && primary) {
+      avatar.innerHTML = primary.bot_avatar
+        ? `<img src="${accountEscape(primary.bot_avatar)}" alt="${accountEscape(primary.bot_name || 'Bot')}">`
+        : `<span class="account-avatar-fallback">${accountEscape([...(primary.bot_name || primary.appid || '?')][0])}</span>`;
+      avatar.title = `${primary.bot_name || primary.appid} · 点击进入聊天`;
+      avatar.classList.toggle('active', active?.appid === primary.appid);
     }
-    if (mobileAvatar && account.bot_avatar) mobileAvatar.src = account.bot_avatar;
-    if (name) name.textContent = account.bot_name || account.appid || 'Bot';
-    [status, mobileStatus].forEach(dot => {
-      if (dot) dot.style.background = account.is_running === false ? 'var(--danger)' : 'var(--online)';
-    });
+    if (mobileAvatar) {
+      if (active?.bot_avatar) {
+        mobileAvatar.classList.remove('svg-icon');
+        mobileAvatar.src = active.bot_avatar;
+      } else {
+        mobileAvatar.classList.add('svg-icon');
+        mobileAvatar.src = 'icons/query.svg';
+      }
+    }
+    if (name) name.textContent = active?.bot_name || active?.appid || 'Bot';
+    if (status) status.style.background = primary?.is_running === false ? 'var(--danger)' : 'var(--online)';
+    if (mobileStatus) mobileStatus.style.background = active?.is_running === false ? 'var(--danger)' : 'var(--online)';
   }
 
   renderAccountSwitcher() {
@@ -185,37 +195,25 @@ class AccountManager {
     if (!switcher) return;
     if (!this.accounts.length) {
       switcher.innerHTML = '';
-      switcher.classList.remove('show');
       return;
     }
+    const activeId = this.getCurrentAccountId();
+    const additionalAccounts = this.accounts.slice(1);
     switcher.innerHTML = `
-      <div class="account-switcher-title">切换账号</div>
-      ${this.accounts.map(account => `
-        <div class="account-switch-item ${account.is_active ? 'active' : ''}" data-appid="${accountEscape(account.appid)}" role="button" tabindex="0">
+      ${additionalAccounts.map(account => `
+        <button type="button" class="account-switch-item ${account.appid === activeId ? 'active' : ''}" data-appid="${accountEscape(account.appid)}" title="${accountEscape(account.bot_name || account.appid)}" aria-label="切换到 ${accountEscape(account.bot_name || account.appid)}">
           ${accountAvatar(account)}
-          <div class="info">
-            <div class="name">${accountEscape(account.bot_name || account.appid)}</div>
-            <div class="status"><i class="${account.is_running ? 'online' : ''}"></i>${account.is_running ? '在线' : '离线'}</div>
-          </div>
-          <button class="remove-btn" data-appid="${accountEscape(account.appid)}" title="删除账号" aria-label="删除账号">×</button>
-        </div>
+        </button>
       `).join('')}
     `;
     switcher.querySelectorAll('.account-switch-item').forEach(item => {
       const activate = event => {
-        if (event.target.closest('.remove-btn')) return;
         if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) return;
         event.preventDefault();
         this.switchAccount(item.dataset.appid);
       };
       item.addEventListener('click', activate);
       item.addEventListener('keydown', activate);
-    });
-    switcher.querySelectorAll('.remove-btn').forEach(button => {
-      button.addEventListener('click', event => {
-        event.stopPropagation();
-        this.removeAccount(button.dataset.appid);
-      });
     });
   }
 
@@ -227,7 +225,6 @@ class AccountManager {
         }));
       }
       await Promise.all([this.loadAccounts(), this.getCurrentAccount()]);
-      this.toggleSwitcher(false);
       if (typeof currentConv !== 'undefined') currentConv = '';
       if (typeof lastMsgId !== 'undefined') lastMsgId = 0;
       if (typeof refreshConversations === 'function') await refreshConversations(false);
@@ -265,24 +262,22 @@ class AccountManager {
     }
   }
 
-  toggleSwitcher(show) {
-    const switcher = document.getElementById('accountSwitcher');
-    if (!switcher || !this.accounts.length) return;
-    this.switcherVisible = show === undefined ? !this.switcherVisible : show;
-    switcher.classList.toggle('show', this.switcherVisible);
-  }
-
   bindEvents() {
     if (this.eventsBound) return;
     this.eventsBound = true;
     const avatar = document.getElementById('railBotAvatar');
+    const mobileAvatar = document.getElementById('mobileBotAvatar');
     const add = document.getElementById('btnAddAccount');
     const modal = document.getElementById('addAccountModal');
     const cancel = document.getElementById('btnCancelAddAccount');
     const form = document.getElementById('addAccountForm');
-    if (avatar) avatar.addEventListener('click', event => {
-      event.stopPropagation();
-      this.toggleSwitcher();
+    if (avatar) avatar.addEventListener('click', () => {
+      const primary = this.accounts[0];
+      if (primary) this.switchAccount(primary.appid);
+    });
+    if (mobileAvatar) mobileAvatar.addEventListener('click', () => {
+      const active = this.currentAccount || this.accounts[0];
+      if (active) this.switchAccount(active.appid);
     });
     if (add) add.addEventListener('click', () => this.showAddAccountModal());
     if (cancel) cancel.addEventListener('click', () => this.hideAddAccountModal());
@@ -293,14 +288,9 @@ class AccountManager {
     if (modal) modal.addEventListener('click', event => {
       if (event.target === modal) this.hideAddAccountModal();
     });
-    document.addEventListener('click', event => {
-      const switcher = document.getElementById('accountSwitcher');
-      if (switcher && !switcher.contains(event.target)) this.toggleSwitcher(false);
-    });
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape') {
         this.hideAddAccountModal();
-        this.toggleSwitcher(false);
       }
     });
   }

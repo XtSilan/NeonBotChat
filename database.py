@@ -789,7 +789,8 @@ async def get_all_accounts() -> list[dict]:
     """获取所有账号"""
     def _do():
         conn = get_db()
-        rows = conn.execute("SELECT * FROM accounts ORDER BY last_login DESC").fetchall()
+        # 账号栏按创建顺序展示：首个账号固定在最上方，新账号依次追加到下方。
+        rows = conn.execute("SELECT * FROM accounts ORDER BY rowid ASC").fetchall()
         conn.close()
         return [dict(r) for r in rows]
     return await asyncio.to_thread(_do)

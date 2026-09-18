@@ -481,6 +481,87 @@ MEDIA_TYPE = {
 
 # URL 上传接口使用相同的映射
 
+_MEDIA_CONTENT_TYPE = {
+    "image": "image/png",
+    "voice": "audio/wav",
+    "video": "video/mp4",
+    "file": "application/octet-stream",
+}
+
+
+async def _upload_media_bytes(
+    endpoint: str,
+    media_bytes: bytes,
+    file_type: str = "image",
+    srv_send_msg: bool = False,
+    file_name: str = "",
+) -> dict:
+    """使用 multipart 二进制上传，避免 QQ 云端回抓不可达的私网 URL。"""
+    if file_type not in MEDIA_TYPE:
+        raise ValueError(f"file_type 必须是 {list(MEDIA_TYPE.keys())}，收到: {file_type}")
+    if not media_bytes:
+        raise ValueError("媒体文件内容为空")
+
+    token = await _get_access_token()
+    headers = {"Authorization": f"{AUTH_TYPE} {token}"}
+    suffix = {"image": ".png", "voice": ".wav", "video": ".mp4", "file": ".bin"}.get(file_type, ".bin")
+    upload_name = file_name or f"media{suffix}"
+    form = aiohttp.FormData()
+    form.add_field("file_type", str(MEDIA_TYPE[file_type]))
+    if srv_send_msg:
+        form.add_field("srv_send_msg", "true")
+    form.add_field(
+        "file",
+        media_bytes,
+        filename=upload_name,
+        content_type=_MEDIA_CONTENT_TYPE.get(file_type, "application/octet-stream"),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(endpoint, headers=headers, data=form) as resp:
+            text = await resp.text()
+            try:
+                result = json.loads(text) if text else {}
+            except json.JSONDecodeError:
+                result = {"raw": text}
+            if resp.status != 200:
+                _log.error(f"📤 multipart富媒体上传失败 ({resp.status}): {text}")
+                raise RuntimeError(f"multipart富媒体上传失败: {text}")
+            if srv_send_msg:
+                return result
+            file_info = result.get("file_info")
+            if not file_info:
+                raise RuntimeError(f"上传成功但未返回 file_info: {result}")
+            return {"file_info": file_info}
+
+
+async def upload_c2c_media_bytes(
+    user_openid: str,
+    media_bytes: bytes,
+    file_type: str = "image",
+    srv_send_msg: bool = False,
+    file_name: str = "",
+) -> dict:
+    """使用 multipart 二进制上传富媒体到 C2C 私聊。"""
+    endpoint = f"{BASE_URL}/v2/users/{user_openid}/files"
+    result = await _upload_media_bytes(endpoint, media_bytes, file_type, srv_send_msg, file_name)
+    _log.info(f"📤 C2C multipart上传成功 file_type={file_type} bytes={len(media_bytes)}")
+    return result
+
+
+async def upload_group_media_bytes(
+    group_openid: str,
+    media_bytes: bytes,
+    file_type: str = "image",
+    srv_send_msg: bool = False,
+    file_name: str = "",
+) -> dict:
+    """使用 multipart 二进制上传富媒体到群聊。"""
+    endpoint = f"{BASE_URL}/v2/groups/{group_openid}/files"
+    result = await _upload_media_bytes(endpoint, media_bytes, file_type, srv_send_msg, file_name)
+    _log.info(f"📤 群 multipart上传成功 file_type={file_type} bytes={len(media_bytes)}")
+    return result
+
 
 async def upload_group_media_by_url(
     group_openid: str,

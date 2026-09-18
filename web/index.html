@@ -51,15 +51,14 @@
       <span id="railStatusDot" style="position:absolute;bottom:0;right:0;width:11px;height:11px;border-radius:50%;background:var(--online);border:2px solid #141519;z-index:2;"></span>
     </div>
     
-    <!-- 添加账号按钮 -->
+    <!-- 其他账号头像栈；添加账号按钮始终位于栈底 -->
+    <div class="account-switcher" id="accountSwitcher" aria-label="账号列表">
+      <!-- 动态生成 -->
+    </div>
+
     <button class="rail-btn account-add-btn" id="btnAddAccount" title="添加账号" aria-label="添加账号">
       <span aria-hidden="true">+</span>
     </button>
-    
-    <!-- 账号切换下拉 -->
-    <div class="account-switcher" id="accountSwitcher">
-      <!-- 动态生成 -->
-    </div>
     
     <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:16px;">
       <button class="rail-btn" id="railHomeBtn" title="主页"><img src="icons/home.svg" class="svg-icon" style="width:18px;height:18px;" alt=""></button>

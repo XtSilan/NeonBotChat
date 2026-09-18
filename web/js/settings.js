@@ -1077,22 +1077,26 @@ function applyBotAvatar() {
     $('#botAvatarPlaceholder').style.display = '';
   }
   // 侧侧栏 Bot 头像（有头像显示头像，无则 query.svg，失败回退 query.svg）
-  const rail = $('#railBotAvatar');
-  if (rail) {
-    rail.innerHTML = av
-      ? `<img src="${escHtml(av)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.outerHTML='<img src=&quot;icons/query.svg&quot; class=&quot;svg-icon&quot; style=&quot;width:22px;height:22px&quot; alt=&quot;&quot;>'">`
-      : `<img src="icons/query.svg" class="svg-icon" style="width:22px;height:22px;" alt="">`;
-  }
-  // 移动端顶栏头像：真实头像不带反色滤镜（svg-icon 会 invert），回退时恢复 query.svg
-  const mav = $('#mobileBotAvatarImg');
-  if (mav) {
-    if (av) {
-      mav.classList.remove('svg-icon');
-      mav.src = av;
-      mav.onerror = () => { mav.onerror = null; mav.classList.add('svg-icon'); mav.src = 'icons/query.svg'; };
-    } else {
-      mav.src = 'icons/query.svg';
-      mav.classList.add('svg-icon');
+  // 账号头像由 AccountManager 统一渲染，避免设置页刷新机器人信息时覆盖头像栈。
+  const accountManager = window.accountManager;
+  if (!accountManager || !accountManager.accounts?.length) {
+    const rail = $('#railBotAvatar');
+    if (rail) {
+      rail.innerHTML = av
+        ? `<img src="${escHtml(av)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.outerHTML='<img src=&quot;icons/query.svg&quot; class=&quot;svg-icon&quot; style=&quot;width:22px;height:22px&quot; alt=&quot;&quot;>'">`
+        : `<img src="icons/query.svg" class="svg-icon" style="width:22px;height:22px;" alt="">`;
+    }
+    // 移动端顶栏头像：真实头像不带反色滤镜（svg-icon 会 invert），回退时恢复 query.svg
+    const mav = $('#mobileBotAvatarImg');
+    if (mav) {
+      if (av) {
+        mav.classList.remove('svg-icon');
+        mav.src = av;
+        mav.onerror = () => { mav.onerror = null; mav.classList.add('svg-icon'); mav.src = 'icons/query.svg'; };
+      } else {
+        mav.src = 'icons/query.svg';
+        mav.classList.add('svg-icon');
+      }
     }
   }
 }
@@ -1108,18 +1112,6 @@ async function refreshBotAvatar() {
     }
   } catch {}
 }
-
-// 点击侧栏头像 → 打开设置并跳到「机器人信息」（头像只读，不提供上传）
-$('#railBotAvatar').addEventListener('click', () => {
-  openSettings();
-  document.querySelector('.settings-nav-item[data-tab="account"]').click();
-});
-
-// 移动端顶栏头像：与侧栏头像同行为 → 设置-账号与安全页
-$('#mobileBotAvatar').addEventListener('click', () => {
-  openSettings();
-  document.querySelector('.settings-nav-item[data-tab="account"]').click();
-});
 
 // 点击 Bot logo / 「BotChat」 → 打开设置并跳到「关于与帮助」（桌面侧栏 + 移动端顶栏共用）
 $('#railLogo').addEventListener('click', () => {
