@@ -44,6 +44,24 @@ class BotManager:
         self.bots: Dict[str, BotInstance] = {}
         self.active_appid: Optional[str] = None
         self._lock = threading.Lock()
+
+    def _activate_credentials(self, bot: BotInstance) -> None:
+        """让依赖全局凭据的主动消息 API 跟随当前账号。"""
+        import PatchActiveMsg
+        import database
+
+        PatchActiveMsg.APP_ID = bot.appid
+        PatchActiveMsg.CLIENT_SECRET = bot.secret
+        PatchActiveMsg._access_token = None
+        PatchActiveMsg._token_expire_at = 0.0
+        database.bot_name = bot.bot_name or "Bot"
+        database.bot_start_time = bot.start_time or 0.0
+
+        try:
+            import web_server
+            web_server._BOT_APP_ID = bot.appid
+        except Exception:
+            pass
     
     async def login(self, appid: str, secret: str) -> dict:
         """登录并启动 Bot
@@ -55,48 +73,53 @@ class BotManager:
         Returns:
             dict: {"ok": bool, "account": dict, "error": str}
         """
+        if appid in self.bots and self.bots[appid].is_running:
+            self.active_appid = appid
+            self._activate_credentials(self.bots[appid])
+            await update_account_last_login(appid)
+            return {"ok": True, "account": await get_account(appid)}
+
+        # 验证缓存也必须隔离，否则第二个账号会误用第一个账号的 token。
+        try:
+            from PatchActiveMsg import _get_access_token
+            import PatchActiveMsg
+            old_state = (
+                PatchActiveMsg.APP_ID,
+                PatchActiveMsg.CLIENT_SECRET,
+                PatchActiveMsg._access_token,
+                PatchActiveMsg._token_expire_at,
+            )
+            PatchActiveMsg.APP_ID = appid
+            PatchActiveMsg.CLIENT_SECRET = secret
+            PatchActiveMsg._access_token = None
+            PatchActiveMsg._token_expire_at = 0.0
+            try:
+                token = await _get_access_token()
+                if not token:
+                    return {"ok": False, "error": "AppID 或 Secret 无效"}
+            finally:
+                (
+                    PatchActiveMsg.APP_ID,
+                    PatchActiveMsg.CLIENT_SECRET,
+                    PatchActiveMsg._access_token,
+                    PatchActiveMsg._token_expire_at,
+                ) = old_state
+        except Exception as e:
+            return {"ok": False, "error": f"验证失败: {str(e)}"}
+
+        account = await add_account(appid, secret)
+        bot = BotInstance(appid=appid, secret=secret)
         with self._lock:
-            # 检查是否已在运行
-            if appid in self.bots and self.bots[appid].is_running:
-                self.active_appid = appid
-                await update_account_last_login(appid)
-                return {"ok": True, "account": await get_account(appid)}
-            
-            # 验证 AppID/Secret（尝试获取 access token）
-            try:
-                from PatchActiveMsg import _get_access_token, APP_ID, CLIENT_SECRET
-                # 临时替换配置进行验证
-                import PatchActiveMsg
-                old_appid = PatchActiveMsg.APP_ID
-                old_secret = PatchActiveMsg.CLIENT_SECRET
-                PatchActiveMsg.APP_ID = appid
-                PatchActiveMsg.CLIENT_SECRET = secret
-                
-                try:
-                    token = await _get_access_token()
-                    if not token:
-                        return {"ok": False, "error": "AppID 或 Secret 无效"}
-                finally:
-                    PatchActiveMsg.APP_ID = old_appid
-                    PatchActiveMsg.CLIENT_SECRET = old_secret
-            except Exception as e:
-                return {"ok": False, "error": f"验证失败: {str(e)}"}
-            
-            # 保存账号到数据库
-            account = await add_account(appid, secret)
-            
-            # 创建 Bot 实例
-            bot = BotInstance(appid=appid, secret=secret)
             self.bots[appid] = bot
-            
-            # 启动 Bot
-            try:
-                await self._start_bot(bot)
-                self.active_appid = appid
-                return {"ok": True, "account": account}
-            except Exception as e:
-                del self.bots[appid]
-                return {"ok": False, "error": f"启动失败: {str(e)}"}
+        try:
+            await self._start_bot(bot)
+            self.active_appid = appid
+            self._activate_credentials(bot)
+            return {"ok": True, "account": account}
+        except Exception as e:
+            with self._lock:
+                self.bots.pop(appid, None)
+            return {"ok": False, "error": f"启动失败: {str(e)}"}
     
     async def _start_bot(self, bot: BotInstance):
         """启动单个 Bot 实例"""
@@ -135,36 +158,36 @@ class BotManager:
     async def logout(self, appid: str):
         """登出 Bot"""
         with self._lock:
-            if appid not in self.bots:
-                return
-            
-            bot = self.bots[appid]
-            if bot.client:
-                # 停止客户端
-                try:
-                    await bot.client.close()
-                except:
-                    pass
-            
-            bot.is_running = False
-            
-            # 如果是当前活跃账号，切换到其他账号
-            if self.active_appid == appid:
-                self.active_appid = None
-                for other_appid, other_bot in self.bots.items():
-                    if other_appid != appid and other_bot.is_running:
-                        self.active_appid = other_appid
-                        break
+            bot = self.bots.get(appid)
+        if not bot:
+            return
+
+        if bot.client and bot.loop and bot.loop.is_running():
+            try:
+                future = asyncio.run_coroutine_threadsafe(bot.client.close(), bot.loop)
+                await asyncio.wait_for(asyncio.wrap_future(future), timeout=3)
+            except Exception:
+                pass
+
+        bot.is_running = False
+        if self.active_appid == appid:
+            self.active_appid = None
+            for other_appid, other_bot in self.bots.items():
+                if other_appid != appid and other_bot.is_running:
+                    self.active_appid = other_appid
+                    self._activate_credentials(other_bot)
+                    break
     
     async def switch(self, appid: str) -> dict:
         """切换当前账号"""
-        if appid not in self.bots:
-            return {"ok": False, "error": "账号不存在"}
-        
-        if not self.bots[appid].is_running:
-            return {"ok": False, "error": "账号未运行"}
+        if appid not in self.bots or not self.bots[appid].is_running:
+            account = await get_account(appid)
+            if not account:
+                return {"ok": False, "error": "账号不存在"}
+            return await self.login(appid, account["secret"])
         
         self.active_appid = appid
+        self._activate_credentials(self.bots[appid])
         await update_account_last_login(appid)
         return {"ok": True}
     
@@ -223,6 +246,8 @@ class MyClient(botpy.Client):
         if bot:
             bot.bot_name = self.robot.name
             await update_account_info(self.appid, bot_name=self.robot.name)
+            if self.bot_manager.get_active_appid() == self.appid:
+                self.bot_manager._activate_credentials(bot)
         _log.info(f"🤖 robot 「{self.robot.name}」 (appid={self.appid}) on_ready!")
     
     async def on_group_message_create(self, message: GroupMessage):
@@ -274,7 +299,9 @@ class MyClient(botpy.Client):
             attachments_json = _json.dumps(norm_attachments, ensure_ascii=False)
             
             # 创建/更新私聊会话
-            await upsert_conversation(user_id, name=f"私聊 {user_id[:10]}", conv_type="direct")
+            await upsert_conversation(
+                user_id, name=f"私聊 {user_id[:10]}", conv_type="direct", account_id=self.appid
+            )
             
             # 自动刷新对方最新昵称/头像
             try:
@@ -295,9 +322,11 @@ class MyClient(botpy.Client):
                 msg_id=msg_id,
                 msg_type=getattr(message, "message_type", 0) or 0,
                 attachments=attachments_json,
+                account_id=self.appid,
             )
             saved["conv_type"] = "direct"
-            saved["account_id"] = self.appid
+            account = self.bot_manager.get_bot(self.appid)
+            saved["account_name"] = account.bot_name if account else ""
             push_bot_message({"type": "new_message", "data": saved})
         except Exception as e:
             _log.warning(f"[C2C] 处理失败: {e}")
@@ -377,7 +406,9 @@ class MyClient(botpy.Client):
             
             # 确保会话存在
             group_name = f"群聊 {group_id[:8]}"
-            await upsert_conversation(group_id, name=group_name, conv_type="group")
+            await upsert_conversation(
+                group_id, name=group_name, conv_type="group", account_id=self.appid
+            )
             
             # 保存消息
             avatar_url = f"https://q.qlogo.cn/qqapp/{self.appid}/{author_id}/100" if author_id else ""
@@ -393,6 +424,7 @@ class MyClient(botpy.Client):
                 attachments=attachments_json,
                 member_role=member_role,
                 ref_idx=get_msg_ref_idx(msg_id_for_att),
+                account_id=self.appid,
             )
             
             # 补上 @信息
@@ -402,7 +434,6 @@ class MyClient(botpy.Client):
                 saved["is_at"] = True
             
             # 附带账号信息
-            saved["account_id"] = self.appid
             saved["account_name"] = self.bot_manager.get_bot(self.appid).bot_name if self.bot_manager.get_bot(self.appid) else ""
             
             # 推送到 WebUI

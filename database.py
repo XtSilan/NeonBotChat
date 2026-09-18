@@ -158,21 +158,24 @@ async def upsert_conversation(
     name: str = "",
     conv_type: str = "group",
     avatar_url: str = "",
+    account_id: str = "",
 ) -> None:
     def _do():
         conn = get_db()
         # 只在会话不存在时插入，已存在则只更新明确传了的字段
         existing = conn.execute(
-            "SELECT name FROM conversations WHERE id = ?", (conv_id,)
+            "SELECT name, account_id FROM conversations WHERE id = ?", (conv_id,)
         ).fetchone()
         if existing:
             # 已存在：仅当传了非空 name 且旧 name 是默认名时才更新
             if name and existing["name"] and existing["name"].startswith("群聊 "):
                 conn.execute("UPDATE conversations SET name = ? WHERE id = ?", (name, conv_id))
+            if account_id and not existing["account_id"]:
+                conn.execute("UPDATE conversations SET account_id = ? WHERE id = ?", (account_id, conv_id))
         else:
             conn.execute(
-                "INSERT INTO conversations (id, name, type, avatar_url) VALUES (?, ?, ?, ?)",
-                (conv_id, name or f"群聊 {conv_id[:10]}", conv_type, avatar_url),
+                "INSERT INTO conversations (id, name, type, avatar_url, account_id) VALUES (?, ?, ?, ?, ?)",
+                (conv_id, name or f"群聊 {conv_id[:10]}", conv_type, avatar_url, account_id),
             )
         conn.commit()
         conn.close()
@@ -338,20 +341,29 @@ async def reset_unread(conv_id: str) -> None:
     await asyncio.to_thread(_do)
 
 
-async def get_conversations(limit: int = 50, include_hidden: bool = False) -> list[dict]:
+async def get_conversations(limit: int = 50, include_hidden: bool = False, account_id: str = "") -> list[dict]:
     def _do():
         conn = get_db()
+        filters = []
+        args: list = []
+        if not include_hidden:
+            filters.append("hidden = 0")
+        if account_id:
+            filters.append("account_id = ?")
+            args.append(account_id)
+        where = f"WHERE {' AND '.join(filters)}" if filters else ""
+        args.append(limit)
         rows = conn.execute("""
             SELECT id, name, type, avatar_url, last_message, last_sender, last_direction,
                    unread_count, pinned, muted, hidden,
                    user_note, official_name, member_num, group_memo, group_class, group_tags, bot_role,
-                   proactive_msg, recv_setting, info_updated_at,
+                   proactive_msg, recv_setting, info_updated_at, account_id,
                    datetime(last_message_time) as last_time
             FROM conversations
             {where}
             ORDER BY pinned DESC, last_message_time DESC
             LIMIT ?
-        """.format(where="" if include_hidden else "WHERE hidden = 0"), (limit,)).fetchall()
+        """.format(where=where), args).fetchall()
         conn.close()
         convs = [dict(r) for r in rows]
         for c in convs:
@@ -412,6 +424,7 @@ async def save_message(
     quote_thumbs: str = "",
     ref_idx: str = "",
     quoted_ref_idx: str = "",
+    account_id: str = "",
 ) -> dict:
     def _do():
         conn = get_db()
@@ -419,15 +432,20 @@ async def save_message(
         # 先确保会话存在（否则 messages 外键约束失败）
         if conn.execute("SELECT COUNT(*) FROM conversations WHERE id = ?", (conversation_id,)).fetchone()[0] == 0:
             conn.execute("""
-                INSERT INTO conversations (id, name, type)
-                VALUES (?, ?, ?)
-            """, (conversation_id, conversation_id, "group"))
+                INSERT INTO conversations (id, name, type, account_id)
+                VALUES (?, ?, ?, ?)
+            """, (conversation_id, conversation_id, "group", account_id))
+        elif account_id:
+            conn.execute(
+                "UPDATE conversations SET account_id = ? WHERE id = ? AND account_id = ''",
+                (account_id, conversation_id),
+            )
         cur = conn.execute("""
-            INSERT INTO messages (conversation_id, sender_openid, sender_name,
+            INSERT INTO messages (conversation_id, account_id, sender_openid, sender_name,
                                   sender_avatar, content, msg_type, direction, msg_id, attachments, member_role,
                                   quoted_sender, quoted_content, quote_thumbs, ref_idx, quoted_ref_idx, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (conversation_id, sender_openid, sender_name, sender_avatar, content, msg_type, direction, msg_id, attachments, member_role, quoted_sender, quoted_content, quote_thumbs, ref_idx, quoted_ref_idx, now))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (conversation_id, account_id, sender_openid, sender_name, sender_avatar, content, msg_type, direction, msg_id, attachments, member_role, quoted_sender, quoted_content, quote_thumbs, ref_idx, quoted_ref_idx, now))
         msg_pk = cur.lastrowid
 
         # 更新会话摘要（转发消息预览统一为 [聊天记录]）
@@ -519,45 +537,51 @@ async def get_all_messages(conv_id: str) -> list[dict]:
     return await asyncio.to_thread(_do)
 
 
-async def get_stats() -> dict:
+async def get_stats(account_id: str = "") -> dict:
     """会话数据统计：今日收发、活跃群 TOP5、近7天趋势/小时分布/媒体分布/引用、会话参与度"""
     def _do():
         conn = get_db()
         WEEK = "timestamp >= datetime('now', 'localtime', '-6 days')"
-        today = conn.execute("""
+        account_filter = " AND account_id = ?" if account_id else ""
+        joined_account_filter = " AND m.account_id = ?" if account_id else ""
+        account_args = (account_id,) if account_id else ()
+        today = conn.execute(f"""
             SELECT direction, COUNT(*) AS cnt FROM messages
             WHERE date(timestamp) = date('now', 'localtime')
+            {account_filter}
             GROUP BY direction
-        """).fetchall()
+        """, account_args).fetchall()
         top = conn.execute(f"""
             SELECT c.name AS name, c.user_note, c.official_name, c.id AS conv_id, COUNT(*) AS cnt
             FROM messages m
             LEFT JOIN conversations c ON c.id = m.conversation_id
-            WHERE m.{WEEK}
+            WHERE m.{WEEK}{joined_account_filter}
             GROUP BY m.conversation_id
             ORDER BY cnt DESC LIMIT 5
-        """).fetchall()
-        total = conn.execute("SELECT COUNT(*) AS cnt FROM messages").fetchone()["cnt"]
+        """, account_args).fetchall()
+        total = conn.execute(
+            f"SELECT COUNT(*) AS cnt FROM messages WHERE 1=1{account_filter}", account_args
+        ).fetchone()["cnt"]
         # 近 7 天每日趋势
         trend = conn.execute(f"""
             SELECT date(timestamp) AS d, COUNT(*) AS cnt FROM messages
-            WHERE {WEEK}
+            WHERE {WEEK}{account_filter}
             GROUP BY d ORDER BY d
-        """).fetchall()
+        """, account_args).fetchall()
         # 近 7 天 24 小时分布
         hourly = conn.execute(f"""
             SELECT CAST(strftime('%H', timestamp) AS INTEGER) AS h, COUNT(*) AS cnt FROM messages
-            WHERE {WEEK}
+            WHERE {WEEK}{account_filter}
             GROUP BY h
-        """).fetchall()
+        """, account_args).fetchall()
         # 近 7 天「星期×小时」热力图（strftime('%w')：周日=0 … 周六=6）
         heatmap = conn.execute(f"""
             SELECT CAST(strftime('%w', timestamp) AS INTEGER) AS dow,
                    CAST(strftime('%H', timestamp) AS INTEGER) AS hr,
                    COUNT(*) AS cnt
-            FROM messages WHERE {WEEK}
+            FROM messages WHERE {WEEK}{account_filter}
             GROUP BY dow, hr
-        """).fetchall()
+        """, account_args).fetchall()
         hm = {}
         for r in heatmap:
             hm.setdefault(r["dow"], {})[r["hr"]] = r["cnt"]
@@ -570,24 +594,30 @@ async def get_stats() -> dict:
             ("file",  '%"content_type": "file"%'),
         ):
             media[key] = conn.execute(
-                f"SELECT COUNT(*) AS cnt FROM messages WHERE {WEEK} AND attachments LIKE ?", (pat,)
+                f"SELECT COUNT(*) AS cnt FROM messages WHERE {WEEK} AND attachments LIKE ?{account_filter}",
+                (pat, *account_args),
             ).fetchone()["cnt"]
         # 近 7 天引用回复数
         quoted = conn.execute(
-            f"SELECT COUNT(*) AS cnt FROM messages WHERE {WEEK} AND quoted_ref_idx != ''"
+            f"SELECT COUNT(*) AS cnt FROM messages WHERE {WEEK} AND quoted_ref_idx != ''{account_filter}",
+            account_args,
         ).fetchone()["cnt"]
         # 近 7 天发言达人 TOP5（按成员昵称聚合）
         senders = conn.execute(f"""
             SELECT sender_name AS name, COUNT(*) AS cnt, MAX(sender_avatar) AS avatar
             FROM messages
-            WHERE {WEEK} AND direction = 'incoming' AND sender_name != ''
+            WHERE {WEEK} AND direction = 'incoming' AND sender_name != ''{account_filter}
             GROUP BY sender_name
             ORDER BY cnt DESC LIMIT 5
-        """).fetchall()
+        """, account_args).fetchall()
         # 会话参与度
-        total_convs = conn.execute("SELECT COUNT(*) AS cnt FROM conversations").fetchone()["cnt"]
+        conv_filter = " WHERE account_id = ?" if account_id else ""
+        total_convs = conn.execute(
+            f"SELECT COUNT(*) AS cnt FROM conversations{conv_filter}", account_args
+        ).fetchone()["cnt"]
         active_convs = conn.execute(
-            f"SELECT COUNT(DISTINCT conversation_id) AS cnt FROM messages WHERE {WEEK}"
+            f"SELECT COUNT(DISTINCT conversation_id) AS cnt FROM messages WHERE {WEEK}{account_filter}",
+            account_args,
         ).fetchone()["cnt"]
         conn.close()
         stats = {"incoming": 0, "outgoing": 0}
@@ -609,6 +639,7 @@ async def get_stats() -> dict:
             "media": media,
             "quoted": quoted,
             "convs": {"total": total_convs, "active": active_convs},
+            "account_id": account_id,
         }
     return await asyncio.to_thread(_do)
 
@@ -732,6 +763,10 @@ async def add_account(appid: str, secret: str, bot_name: str = "", bot_avatar: s
                 "INSERT INTO accounts (id, name, appid, secret, bot_name, bot_avatar, last_login) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (appid, bot_name or appid, appid, secret, bot_name, bot_avatar, _time.time())
             )
+        # 升级自旧版单账号库时，把尚未归属的数据绑定到首个账号。
+        if conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1:
+            conn.execute("UPDATE conversations SET account_id = ? WHERE account_id = ''", (appid,))
+            conn.execute("UPDATE messages SET account_id = ? WHERE account_id = ''", (appid,))
         conn.commit()
         # 返回账号信息
         row = conn.execute("SELECT * FROM accounts WHERE appid = ?", (appid,)).fetchone()

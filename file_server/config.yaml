@@ -2,9 +2,9 @@
 # 复制为 config.yaml 并填入真实值
 
 host: "0.0.0.0"
-port: 8081
+port: 8099
 token: "123456789@@@"
-public-url: "http://192.168.100.110:8081"
+public-url: "http://192.168.100.110:8099"
 cache-dir: "./file_cache"
 max-cache-mb: 1024
 max-file-mb: 100

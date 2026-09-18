@@ -8,18 +8,19 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css">
 <link rel="stylesheet" href="css/base.css?v=26.8.7">
 <link rel="stylesheet" href="css/layout.css?v=26.8.7">
-<link rel="stylesheet" href="css/components.css?v=26.8.7">
+<link rel="stylesheet" href="css/components.css?v=26.9.0">
 <link rel="stylesheet" href="css/light.css?v=26.8.7">
+<link rel="stylesheet" href="css/accounts.css?v=26.9.0">
 </head>
 <body>
 <div class="chat-bg-layer" id="chatBgLayer"></div>
 
 <!-- 添加账号浮窗 -->
-<div class="modal-overlay" id="addAccountModal" style="display:none;">
-  <div class="modal-box" style="width:380px;">
+<div class="modal-overlay" id="addAccountModal" role="dialog" aria-modal="true" aria-labelledby="addAccountTitle">
+  <div class="modal-box account-modal-box">
     <h3>
-      <img src="icons/add.svg" class="svg-icon" style="width:18px;height:18px;" alt="">
-      添加新账号
+      <span class="account-modal-icon" aria-hidden="true">+</span>
+      <span id="addAccountTitle">添加新账号</span>
     </h3>
     <form id="addAccountForm">
       <div class="form-group">
@@ -33,7 +34,7 @@
       <div id="addAccountError" class="error-message" style="display:none;"></div>
       <div class="modal-actions">
         <button type="button" class="btn-cancel" id="btnCancelAddAccount">取消</button>
-        <button type="submit" class="glass-btn active">登录</button>
+        <button type="submit" class="glass-btn active" id="btnSubmitAddAccount">登录并添加</button>
       </div>
     </form>
   </div>
@@ -51,13 +52,12 @@
     </div>
     
     <!-- 添加账号按钮 -->
-    <button class="rail-btn" id="btnAddAccount" title="添加账号" 
-            style="margin-top:8px;width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;">
-      <img src="icons/add.svg" class="svg-icon" style="width:14px;height:14px;" alt="">
+    <button class="rail-btn account-add-btn" id="btnAddAccount" title="添加账号" aria-label="添加账号">
+      <span aria-hidden="true">+</span>
     </button>
     
     <!-- 账号切换下拉 -->
-    <div class="account-switcher" id="accountSwitcher" style="display:none;">
+    <div class="account-switcher" id="accountSwitcher">
       <!-- 动态生成 -->
     </div>
     
@@ -566,34 +566,17 @@
 </main>
 
 <script src="js/utils.js?v=26.8.7"></script>
-<script src="js/core.js?v=26.8.7"></script>
+<script src="js/core.js?v=26.9.0"></script>
 <script src="js/messages.js?v=26.8.7"></script>
 <script src="js/lightbox.js?v=26.8.7"></script>
 <script src="js/contextmenu.js?v=26.8.7"></script>
-<script src="js/settings.js?v=26.8.7"></script>
-<script src="js/accounts.js?v=26.8.7"></script>
-<script src="js/notifications.js?v=26.8.7"></script>
+<script src="js/settings.js?v=26.9.0"></script>
+<script src="js/accounts.js?v=26.9.0"></script>
+<script src="js/notifications.js?v=26.9.0"></script>
 <script>
   // 初始化账号管理器
   document.addEventListener('DOMContentLoaded', () => {
     accountManager.init();
-    accountManager.getCurrentAccount();
-    
-    // 绑定添加账号浮窗事件
-    const addAccountForm = document.getElementById('addAccountForm');
-    if (addAccountForm) {
-      addAccountForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        accountManager.addAccount();
-      });
-    }
-    
-    const btnCancelAddAccount = document.getElementById('btnCancelAddAccount');
-    if (btnCancelAddAccount) {
-      btnCancelAddAccount.addEventListener('click', () => {
-        accountManager.hideAddAccountModal();
-      });
-    }
   });
 </script>
 </body>

@@ -612,13 +612,8 @@ async def main():
                 await bot_manager.switch(account["appid"])
                 break
     else:
-        # 没有已保存的账号，使用配置文件中的账号
-        _log.info(f"[NeonBot] 启动默认 Bot (AppID={APP_ID})…")
-        result = await bot_manager.login(APP_ID, CLIENT_SECRET)
-        if result.get("ok"):
-            _log.info("[NeonBot] 默认 Bot 启动成功 ✓")
-        else:
-            _log.warning(f"[NeonBot] 默认 Bot 启动失败: {result.get('error')}")
+        # 首次启动只开放 WebUI 登录页，账号凭据由用户在页面中提交。
+        _log.info("[NeonBot] 暂无已保存账号，请在 WebUI 登录页添加账号")
 
     # 3) 启动消息泵（后台任务，转发 bot 消息到 WebSocket）
     asyncio.create_task(pump_bot_messages())

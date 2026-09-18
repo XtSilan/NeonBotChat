@@ -94,6 +94,11 @@ function notifyNewMessage(msg) {
 }
 
 function handleIncomingMessage(msg) {
+  // 所有账号的消息都先交给跨账号提醒；当前界面只消费活跃账号的数据。
+  window.dispatchEvent(new CustomEvent('neonbot:new-message', { detail: msg }));
+  const activeAccountId = localStorage.getItem('neonbot_active_account') || '';
+  if (msg.account_id && activeAccountId && msg.account_id !== activeAccountId) return;
+
   // 系统消息（direction=center，如「XXX加入了群聊。」）不弹桌面通知
   if (msg.direction !== 'center') notifyNewMessage(msg);
   // 隐藏会话收到新消息：不插入会话列表，只更新搜索缓存

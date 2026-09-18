@@ -17,8 +17,13 @@
 .login-container {
   width: 400px;
   max-width: 90vw;
-  background: var(--surface, #1e1f23);
-  border-radius: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: rgba(30, 31, 35, 0.72);
+  border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 12px;
   padding: 32px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
@@ -57,6 +62,11 @@
 }
 
 .account-item {
+  width: 100%;
+  border: 1px solid transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -69,7 +79,10 @@
 
 .account-item:hover {
   background: var(--hover, #3a3b3f);
+  border-color: var(--border, #3e3f44);
 }
+
+.account-item:disabled { opacity: 0.65; cursor: wait; }
 
 .account-item .avatar {
   width: 40px;
@@ -84,8 +97,14 @@
   overflow: hidden;
 }
 
+.account-item .avatar img,
+.account-switch-item .avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+
 .account-item .info {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .account-item .name {
@@ -201,7 +220,8 @@
 }
 
 .btn-login {
-  padding: 10px 24px;
+  width: 100%;
+  padding: 11px 24px;
   border-radius: 8px;
   border: none;
   background: var(--accent, #5865f2);
@@ -216,12 +236,30 @@
   background: var(--accent-hover, #4752c4);
 }
 
+.btn-login:disabled { opacity: 0.65; cursor: wait; }
+
 /* 添加账号浮窗 */
 .modal-box h3 {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 16px;
+}
+
+.account-modal-box { width: 380px; }
+
+.account-modal-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(148, 150, 155, 0.2);
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1;
 }
 
 .error-message {
@@ -242,6 +280,18 @@
   z-index: 100;
   min-width: 200px;
   border: 1px solid var(--border, #3e3f44);
+  display: none;
+  width: 240px;
+  max-height: min(420px, calc(100vh - 120px));
+  overflow-y: auto;
+}
+
+.account-switcher.show { display: block; animation: accountMenuIn 0.16s ease-out; }
+
+.account-switcher-title {
+  padding: 5px 8px 8px;
+  color: var(--text-dim);
+  font-size: 0.72em;
 }
 
 .account-switch-item {
@@ -289,6 +339,17 @@
   color: var(--text-dim, #8e8f93);
 }
 
+.account-switch-item .status i {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+
+.account-switch-item .status i.online { background: var(--online); }
+
 .account-switch-item .remove-btn {
   width: 20px;
   height: 20px;
@@ -311,21 +372,40 @@
 
 /* 添加账号按钮 */
 #btnAddAccount {
-  margin-top: 8px;
-  width: 24px;
-  height: 24px;
+  margin-top: 9px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  background: var(--accent, #5865f2);
+  background: rgba(148, 150, 155, 0.22);
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
   cursor: pointer;
   transition: background 0.2s;
+  color: var(--text-dim);
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1;
 }
 
 #btnAddAccount:hover {
-  background: var(--accent-hover, #4752c4);
+  background: rgba(148, 150, 155, 0.38);
+  color: var(--text);
+}
+
+#railBotAvatar > img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.account-avatar-fallback { font-size: 0.95em; font-weight: 700; color: var(--text); }
+
+@keyframes accountMenuIn {
+  from { opacity: 0; transform: translateX(-6px) scale(0.98); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+body.light .login-container,
+body.light .account-switcher {
+  background: rgba(240, 241, 244, 0.82);
+  border-color: rgba(0,0,0,0.1);
 }
 
 /* 通知气泡样式 */
@@ -417,6 +497,95 @@
   }
 }
 
+/* 非当前账号的新消息：从左侧账号栏旁展开，3 秒后原路收回。 */
+.account-notification-container {
+  position: fixed;
+  top: 72px;
+  left: 64px;
+  z-index: 180;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.account-notification-bubble {
+  width: min(330px, calc(100vw - 80px));
+  min-height: 88px;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 11px 14px 11px 11px;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 10px;
+  background: rgba(30,31,35,0.82);
+  backdrop-filter: blur(18px) saturate(130%);
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.3);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+  transform-origin: left center;
+  animation: accountNoticeIn 0.28s ease-out both;
+}
+
+.account-notification-bubble.hiding { animation: accountNoticeOut 0.24s ease-in both; }
+.account-notification-bubble:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+
+.notification-account-avatar {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.9em;
+  font-weight: 700;
+}
+
+.notification-account-avatar img,
+.notification-sender-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.notification-copy { min-width: 0; flex: 1; display: grid; grid-template-columns: 1fr auto; column-gap: 8px; }
+.notification-title { font-size: 0.86em; font-weight: 700; }
+.notification-account-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.7em; color: var(--accent); }
+.notification-sender-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; margin-top: 7px; min-width: 0; }
+.notification-sender-avatar {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--bubble-in);
+  font-size: 0.68em;
+}
+.notification-sender-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8em; font-weight: 600; }
+.notification-preview { grid-column: 1 / -1; margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.73em; color: var(--text-dim); }
+
+@keyframes accountNoticeIn {
+  from { opacity: 0; transform: translateX(-18px) scaleX(0.94); }
+  to { opacity: 1; transform: translateX(0) scaleX(1); }
+}
+
+@keyframes accountNoticeOut {
+  from { opacity: 1; transform: translateX(0) scaleX(1); }
+  to { opacity: 0; transform: translateX(-18px) scaleX(0.94); }
+}
+
+body.light .account-notification-bubble {
+  background: rgba(240,241,244,0.9);
+  border-color: rgba(0,0,0,0.1);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .login-container {
@@ -440,4 +609,7 @@
     top: 80px;
     min-width: auto;
   }
+
+  .account-notification-container { top: 68px; left: 10px; right: 10px; }
+  .account-notification-bubble { width: 100%; }
 }

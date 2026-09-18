@@ -422,6 +422,33 @@ body.light .link-card { background: rgba(0,0,0,0.05); }
   padding: 18px 20px; border-radius: 12px;
   margin-bottom: 0; min-width: 0;
 }
+.stats-toolbar {
+  grid-column: 1 / -1;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 4px 6px;
+  color: var(--text);
+}
+.stats-toolbar-title { font-size: 1em; font-weight: 700; }
+.stats-toolbar-meta { margin-top: 2px; font-size: 0.72em; color: var(--text-dim); }
+.stats-account-filter { display: flex; align-items: center; gap: 9px; font-size: 0.76em; color: var(--text-dim); }
+.stats-account-filter select {
+  min-width: 150px;
+  height: 34px;
+  padding: 0 32px 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  background: color-mix(in srgb, var(--sidebar) 86%, transparent);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.stats-account-filter select:focus { border-color: var(--accent); }
+.stats-empty { grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-dim); }
 .stat-spotlight {
   position: absolute; inset: 0; pointer-events: none;
   opacity: 0; transition: opacity 0.25s;
@@ -441,6 +468,16 @@ body.light #homeStats .stat-card {
 .stat-bar { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; margin-top: 6px; }
 .stat-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.9s ease; }
 .stat-bar-mem { background: #f0a040; }
+
+@media (min-width: 769px) and (max-width: 1100px) {
+  #homeStats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 768px) {
+  .stats-toolbar { min-width: 78vw; align-items: flex-start; flex-direction: column; gap: 8px; }
+  .stats-account-filter { width: 100%; justify-content: space-between; }
+  .stats-account-filter select { min-width: 0; width: min(54vw, 220px); }
+}
 
 /* ── Bot Avatar Upload ──────────────────────── */
 .bot-avatar-upload {

@@ -205,15 +205,44 @@ async def api_login(request: Request):
 # 拆分后的 CSS / JS 静态文件
 app.mount("/css", StaticFiles(directory=os.path.join(TEMPLATES, "css")), name="css")
 app.mount("/js", StaticFiles(directory=os.path.join(TEMPLATES, "js")), name="js")
+app.mount("/sounds", StaticFiles(directory=os.path.join(TEMPLATES, "sounds")), name="sounds")
+
+
+def _read_web_page(filename: str) -> HTMLResponse:
+    path = os.path.join(TEMPLATES, filename)
+    if os.path.isfile(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return HTMLResponse(f.read())
+    return HTMLResponse(f"<h1>{filename} 未找到</h1>", status_code=404)
+
+
+def _active_account_id() -> str:
+    try:
+        from bot_manager import bot_manager
+        return bot_manager.get_active_appid() or ""
+    except Exception:
+        return ""
+
+
+def _active_account_name() -> str:
+    try:
+        from bot_manager import bot_manager
+        bot = bot_manager.get_active()
+        return (bot.bot_name or bot.appid) if bot else ""
+    except Exception:
+        return ""
 
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    html_path = os.path.join(TEMPLATES, "index.html")
-    if os.path.isfile(html_path):
-        with open(html_path, "r", encoding="utf-8") as f:
-            return HTMLResponse(f.read())
-    return HTMLResponse("<h1>index.html 未找到</h1>", status_code=404)
+    if not _active_account_id():
+        return _read_web_page("login.html")
+    return _read_web_page("index.html")
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def account_login_page():
+    return _read_web_page("login.html")
 
 
 @app.get("/api/image")
@@ -341,7 +370,9 @@ async def api_send_media(request: Request):
             msg_id=qq_msg_id,
             attachments=attachments,
             ref_idx=ref_idx,
+            account_id=_active_account_id(),
         )
+        saved["account_name"] = _active_account_name()
         saved["conv_type"] = (await get_conversation(conv_id) or {}).get("type", "group")
         await manager.broadcast({"type": "new_message", "data": saved})
         return {"ok": True, "message": saved, "qq_result": result}
@@ -533,10 +564,10 @@ async def api_restart():
 
 
 @app.get("/api/stats")
-async def api_stats():
+async def api_stats(account_id: str = Query("")):
     """会话数据统计：今日收发、活跃群 TOP5、总消息数"""
     from database import get_stats
-    return await get_stats()
+    return await get_stats(account_id.strip())
 
 
 @app.get("/api/logs")
@@ -626,7 +657,9 @@ async def api_status():
 
 @app.get("/api/conversations")
 async def api_conversations(limit: int = 50, include_hidden: bool = False):
-    convs = await get_conversations(limit, include_hidden=include_hidden)
+    convs = await get_conversations(
+        limit, include_hidden=include_hidden, account_id=_active_account_id()
+    )
     # 私聊头像自动获取（PatchUserInfo），不用手动上传
     await _fill_direct_avatars(convs)
     return {"conversations": convs}
@@ -901,7 +934,7 @@ async def api_system_note(request: Request):
     from database import save_message
     saved = await save_message(
         conversation_id=conv_id, sender_openid=member_openid, sender_name=member_name,
-        content=content, direction="center",
+        content=content, direction="center", account_id=_active_account_id(),
     )
     return {"ok": True, "id": saved.get("id") if isinstance(saved, dict) else 0}
 
@@ -1032,6 +1065,7 @@ async def api_join_request_approval(request: Request):
                 content="加入了群聊。",
                 direction="center",
                 sender_avatar=avatar,
+                account_id=_active_account_id(),
             )
             sys_msg["bot_name"] = bot_name
             await manager.broadcast({"type": "new_message", "data": sys_msg})
@@ -1065,11 +1099,15 @@ async def api_add_conversation(request: Request):
                 name = f"私聊 {real}" if real else f"私聊 {openid[:10]}"
             except Exception:
                 name = f"私聊 {openid[:10]}"
-        await upsert_conversation(openid, name=name, conv_type="direct")
+        await upsert_conversation(
+            openid, name=name, conv_type="direct", account_id=_active_account_id()
+        )
         return {"ok": True, "id": openid, "name": name}
 
     name = (body.get("name") or "").strip() or f"群聊 {openid[:10]}"
-    await upsert_conversation(openid, name=name, conv_type="group")
+    await upsert_conversation(
+        openid, name=name, conv_type="group", account_id=_active_account_id()
+    )
     return {"ok": True, "id": openid, "name": name}
 
 
@@ -1182,7 +1220,9 @@ async def api_send_raw(request: Request):
         direction="outgoing",
         msg_id=str(result.get("id", "")),
         msg_type=msg_type,
+        account_id=_active_account_id(),
     )
+    saved["account_name"] = _active_account_name()
     saved["conv_type"] = (await get_conversation(conv_id) or {}).get("type", "group")
     await manager.broadcast({"type": "new_message", "data": saved})
     return {"ok": True, "message": saved, "qq_result": result}
@@ -1280,7 +1320,9 @@ async def api_send(request: Request):
         quoted_content=quoted_content,
         quote_thumbs=quote_thumbs,
         quoted_ref_idx=message_reference.get("message_id", "") if message_reference else "",
+        account_id=_active_account_id(),
     )
+    saved["account_name"] = _active_account_name()
     # 卡片消息：会话列表预览用占位文本（DB 内保留原始 JSON）
     if msg_type == 8:
         try:
@@ -1403,6 +1445,11 @@ async def api_delete_message(msg_db_id: int):
 
 # ── 账号管理 API ──────────────────────────────────────────
 
+def _public_account(account: Optional[dict]) -> Optional[dict]:
+    if not account:
+        return None
+    return {key: value for key, value in account.items() if key != "secret"}
+
 @app.post("/api/accounts/login")
 async def api_login_account(request: Request):
     """登录账号（验证 AppID/Secret 并启动 Bot）"""
@@ -1418,7 +1465,7 @@ async def api_login_account(request: Request):
         result = await bot_manager.login(appid, secret)
         
         if result.get("ok"):
-            return {"ok": True, "account": result.get("account")}
+            return {"ok": True, "account": _public_account(result.get("account"))}
         else:
             return JSONResponse({"error": result.get("error", "登录失败")}, status_code=400)
     except Exception as e:
@@ -1437,7 +1484,7 @@ async def api_get_accounts():
         account["is_running"] = bot_manager.is_running(account["appid"])
         account["is_active"] = bot_manager.get_active_appid() == account["appid"]
     
-    return {"accounts": accounts}
+    return {"accounts": [_public_account(account) for account in accounts]}
 
 
 @app.delete("/api/accounts/{appid}")
@@ -1493,7 +1540,7 @@ async def api_add_account(request: Request):
         
         from database import add_account
         account = await add_account(appid, secret)
-        return {"ok": True, "account": account}
+        return {"ok": True, "account": _public_account(account)}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 

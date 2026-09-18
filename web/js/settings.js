@@ -63,10 +63,16 @@ $('#msgSearchInput').addEventListener('input', () => {
 // ── 周报导出（看板右下角浮动按钮）─────────────────
 $('#btnExportReport').addEventListener('click', exportWeeklyReport);
 
+let statsAccountId = localStorage.getItem('neonbot_stats_account') || '';
+
+function statsApiUrl() {
+  return statsAccountId ? `/api/stats?account_id=${encodeURIComponent(statsAccountId)}` : '/api/stats';
+}
+
 // ── 周报导出（统计看板数据 → Markdown）─────────────
 async function exportWeeklyReport() {
   try {
-    const st = await API('/api/stats');
+    const st = await API(statsApiUrl());
     const recv = st.today.incoming || 0;
     const sent = st.today.outgoing || 0;
     const media = st.media || {};
@@ -111,8 +117,42 @@ async function exportWeeklyReport() {
 async function loadHomeStats() {
   const $box = $('#homeStats');
   if (!$box) return;
-  const html = await renderStatsHtml();
-  $box.innerHTML = html || '<div style="color:var(--text-dim);text-align:center;">暂无数据</div>';
+  try {
+    const accountData = await API('/api/accounts');
+    const accounts = accountData.accounts || [];
+    if (statsAccountId && !accounts.some(account => account.appid === statsAccountId)) {
+      statsAccountId = '';
+      localStorage.removeItem('neonbot_stats_account');
+    }
+    const options = accounts.map(account => `
+      <option value="${escHtml(account.appid)}" ${statsAccountId === account.appid ? 'selected' : ''}>
+        ${escHtml(account.bot_name || account.appid)}
+      </option>`).join('');
+    const html = await renderStatsHtml(statsAccountId);
+    $box.innerHTML = `
+      <div class="stats-toolbar">
+        <div>
+          <div class="stats-toolbar-title">数据概览</div>
+          <div class="stats-toolbar-meta">${accounts.length} 个账号</div>
+        </div>
+        <label class="stats-account-filter" for="statsAccountSelect">
+          <span>统计范围</span>
+          <select id="statsAccountSelect">
+            <option value="" ${statsAccountId ? '' : 'selected'}>全部账号</option>
+            ${options}
+          </select>
+        </label>
+      </div>
+      ${html || '<div class="stats-empty">暂无数据</div>'}`;
+    $('#statsAccountSelect').addEventListener('change', event => {
+      statsAccountId = event.target.value;
+      if (statsAccountId) localStorage.setItem('neonbot_stats_account', statsAccountId);
+      else localStorage.removeItem('neonbot_stats_account');
+      loadHomeStats();
+    });
+  } catch (error) {
+    $box.innerHTML = '<div class="stats-empty">统计数据加载失败</div>';
+  }
 }
 
 // 卡片鼠标聚焦光效：径向高光跟随指针
@@ -749,9 +789,10 @@ function fmtTrendLabel(d) {
   return `${parseInt(m)}/${parseInt(day)}`;
 }
 
-async function renderStatsHtml() {
+async function renderStatsHtml(accountId = statsAccountId) {
   try {
-    const st = await API('/api/stats');
+    const url = accountId ? `/api/stats?account_id=${encodeURIComponent(accountId)}` : '/api/stats';
+    const st = await API(url);
     const recv = st.today.incoming || 0;
     const sent = st.today.outgoing || 0;
     // 近 7 天趋势柱状图

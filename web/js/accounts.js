@@ -1,114 +1,118 @@
-// accounts.js — 账号管理逻辑
-// 处理登录页面和账号切换功能
+// accounts.js - 登录、账号切换与添加账号
+
+function accountEscape(value) {
+  const node = document.createElement('div');
+  node.textContent = value == null ? '' : String(value);
+  return node.innerHTML;
+}
+
+function accountAvatar(account, className = 'avatar') {
+  const name = account.bot_name || account.appid || '?';
+  const content = account.bot_avatar
+    ? `<img src="${accountEscape(account.bot_avatar)}" alt="">`
+    : accountEscape([...name][0] || '?');
+  return `<div class="${className}">${content}</div>`;
+}
+
+async function accountJson(response) {
+  const data = await response.json();
+  if (!response.ok || data.error) throw new Error(data.error || '请求失败');
+  return data;
+}
 
 class LoginManager {
   constructor() {
     this.accounts = [];
   }
-  
+
   async init() {
     await this.loadAccounts();
     this.bindEvents();
   }
-  
+
+  setError(message = '') {
+    const error = document.getElementById('loginError');
+    if (!error) return;
+    error.textContent = message;
+    error.style.display = message ? 'block' : 'none';
+  }
+
   async loadAccounts() {
     try {
-      const resp = await fetch('/api/accounts');
-      const data = await resp.json();
+      const data = await accountJson(await fetch('/api/accounts'));
       this.accounts = data.accounts || [];
       this.renderAccountList();
-    } catch (e) {
-      console.error('加载账号失败:', e);
+    } catch (error) {
+      this.setError(error.message);
     }
   }
-  
+
   renderAccountList() {
     const container = document.getElementById('accountList');
-    if (!container) return;
-    
-    if (!this.accounts.length) {
-      container.innerHTML = '<p class="no-accounts">暂无保存的账号</p>';
-      return;
-    }
-    
-    container.innerHTML = this.accounts.map(acc => `
-      <div class="account-item" data-appid="${acc.appid}">
-        <div class="avatar">
-          ${acc.bot_avatar 
-            ? `<img src="${acc.bot_avatar}" style="width:100%;height:100%;border-radius:50%;">` 
-            : acc.bot_name ? acc.bot_name[0] : acc.appid[0]}
-        </div>
-        <div class="info">
-          <div class="name">${acc.bot_name || acc.appid}</div>
-          <div class="appid">${acc.appid}</div>
-        </div>
-        <div class="status ${acc.is_running ? 'online' : 'offline'}">
-          ${acc.is_running ? '在线' : '离线'}
-        </div>
-      </div>
+    const saved = document.getElementById('savedAccounts');
+    if (!container || !saved) return;
+    saved.style.display = this.accounts.length ? '' : 'none';
+    container.innerHTML = this.accounts.map(account => `
+      <button type="button" class="account-item" data-appid="${accountEscape(account.appid)}">
+        ${accountAvatar(account)}
+        <span class="info">
+          <span class="name">${accountEscape(account.bot_name || account.appid)}</span>
+          <span class="appid">${accountEscape(account.appid)}</span>
+        </span>
+        <span class="status ${account.is_running ? 'online' : 'offline'}">
+          ${account.is_running ? '在线' : '离线'}
+        </span>
+      </button>
     `).join('');
-    
-    // 绑定点击事件
     container.querySelectorAll('.account-item').forEach(item => {
-      item.addEventListener('click', () => {
-        const appid = item.dataset.appid;
-        this.loginWithSaved(appid);
-      });
+      item.addEventListener('click', () => this.loginWithSaved(item.dataset.appid, item));
     });
   }
-  
-  async loginWithSaved(appid) {
+
+  async loginWithSaved(appid, item) {
+    this.setError();
+    item.disabled = true;
     try {
-      const resp = await fetch(`/api/accounts/${appid}/switch`, {
-        method: 'POST'
-      });
-      const data = await resp.json();
-      if (data.ok) {
-        window.location.href = '/';
-      } else {
-        alert(data.error || '登录失败');
-      }
-    } catch (e) {
-      console.error('登录失败:', e);
-      alert('网络错误: ' + e.message);
+      await accountJson(await fetch(`/api/accounts/${encodeURIComponent(appid)}/switch`, {
+        method: 'POST',
+      }));
+      window.location.href = '/';
+    } catch (error) {
+      item.disabled = false;
+      this.setError(error.message);
     }
   }
-  
+
   bindEvents() {
     const form = document.getElementById('loginForm');
-    if (form) {
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        await this.loginWithNew();
-      });
-    }
+    if (form) form.addEventListener('submit', event => {
+      event.preventDefault();
+      this.loginWithNew();
+    });
   }
-  
+
   async loginWithNew() {
     const appid = document.getElementById('loginAppid').value.trim();
     const secret = document.getElementById('loginSecret').value.trim();
-    const remember = document.getElementById('rememberAccount').checked;
-    
+    const submit = document.getElementById('loginSubmit');
+    this.setError();
     if (!appid || !secret) {
-      alert('请输入 AppID 和 Secret');
+      this.setError('请输入 AppID 和 AppSecret');
       return;
     }
-    
+    submit.disabled = true;
+    submit.textContent = '登录中...';
     try {
-      const resp = await fetch('/api/accounts/login', {
+      await accountJson(await fetch('/api/accounts/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appid, secret, remember })
-      });
-      
-      const data = await resp.json();
-      if (data.ok) {
-        window.location.href = '/';
-      } else {
-        alert(data.error || '登录失败');
-      }
-    } catch (e) {
-      alert('网络错误: ' + e.message);
+        body: JSON.stringify({ appid, secret }),
+      }));
+      window.location.href = '/';
+    } catch (error) {
+      this.setError(error.message);
+      submit.disabled = false;
+      submit.textContent = '登录';
     }
   }
 }
@@ -118,248 +122,236 @@ class AccountManager {
     this.accounts = [];
     this.currentAccount = null;
     this.switcherVisible = false;
+    this.eventsBound = false;
   }
-  
+
   async init() {
-    await this.loadAccounts();
+    await Promise.all([this.loadAccounts(), this.getCurrentAccount()]);
     this.bindEvents();
   }
-  
+
+  getCurrentAccountId() {
+    return this.currentAccount?.appid || localStorage.getItem('neonbot_active_account') || '';
+  }
+
   async loadAccounts() {
     try {
-      const resp = await fetch('/api/accounts');
-      const data = await resp.json();
+      const data = await accountJson(await fetch('/api/accounts'));
       this.accounts = data.accounts || [];
       this.renderAccountSwitcher();
-    } catch (e) {
-      console.error('加载账号失败:', e);
+    } catch (error) {
+      console.error('加载账号失败:', error);
     }
   }
-  
+
   async getCurrentAccount() {
     try {
-      const resp = await fetch('/api/accounts/current');
-      const data = await resp.json();
-      if (data.ok) {
-        this.currentAccount = data.account;
-        this.updateCurrentAccountUI();
+      const data = await accountJson(await fetch('/api/accounts/current'));
+      this.currentAccount = data.ok ? data.account : null;
+      if (this.currentAccount) {
+        localStorage.setItem('neonbot_active_account', this.currentAccount.appid);
+      } else {
+        localStorage.removeItem('neonbot_active_account');
       }
-    } catch (e) {
-      console.error('获取当前账号失败:', e);
+      this.updateCurrentAccountUI();
+    } catch (error) {
+      console.error('获取当前账号失败:', error);
     }
   }
-  
+
   updateCurrentAccountUI() {
-    const avatarEl = document.getElementById('railBotAvatar');
-    const nameEl = document.getElementById('mobileBotName');
-    const statusDot = document.getElementById('railStatusDot');
-    
-    if (this.currentAccount) {
-      // 更新头像
-      if (avatarEl) {
-        if (this.currentAccount.bot_avatar) {
-          avatarEl.innerHTML = `<img src="${this.currentAccount.bot_avatar}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
-        } else {
-          avatarEl.innerHTML = `<img src="icons/query.svg" class="svg-icon" style="width:22px;height:22px;" alt="">`;
-        }
-      }
-      
-      // 更新名称
-      if (nameEl) {
-        nameEl.textContent = this.currentAccount.bot_name || 'Bot';
-      }
-      
-      // 更新状态点
-      if (statusDot) {
-        statusDot.style.background = this.currentAccount.is_running ? 'var(--online)' : 'var(--danger)';
-      }
+    if (!this.currentAccount) return;
+    const account = this.accounts.find(item => item.appid === this.currentAccount.appid) || this.currentAccount;
+    const avatar = document.getElementById('railBotAvatar');
+    const mobileAvatar = document.getElementById('mobileBotAvatarImg');
+    const name = document.getElementById('mobileBotName');
+    const status = document.getElementById('railStatusDot');
+    const mobileStatus = document.getElementById('mobileStatusDot');
+    if (avatar) {
+      avatar.innerHTML = account.bot_avatar
+        ? `<img src="${accountEscape(account.bot_avatar)}" alt="${accountEscape(account.bot_name || 'Bot')}">`
+        : `<span class="account-avatar-fallback">${accountEscape([...(account.bot_name || account.appid || '?')][0])}</span>`;
+      avatar.title = `${account.bot_name || account.appid} · 点击切换账号`;
     }
+    if (mobileAvatar && account.bot_avatar) mobileAvatar.src = account.bot_avatar;
+    if (name) name.textContent = account.bot_name || account.appid || 'Bot';
+    [status, mobileStatus].forEach(dot => {
+      if (dot) dot.style.background = account.is_running === false ? 'var(--danger)' : 'var(--online)';
+    });
   }
-  
+
   renderAccountSwitcher() {
     const switcher = document.getElementById('accountSwitcher');
     if (!switcher) return;
-    
-    if (this.accounts.length <= 1) {
-      switcher.style.display = 'none';
+    if (!this.accounts.length) {
+      switcher.innerHTML = '';
+      switcher.classList.remove('show');
       return;
     }
-    
-    switcher.innerHTML = this.accounts.map(acc => `
-      <div class="account-switch-item ${acc.is_active ? 'active' : ''}" data-appid="${acc.appid}">
-        <div class="avatar">
-          ${acc.bot_avatar 
-            ? `<img src="${acc.bot_avatar}" style="width:100%;height:100%;border-radius:50%;">` 
-            : acc.bot_name ? acc.bot_name[0] : acc.appid[0]}
+    switcher.innerHTML = `
+      <div class="account-switcher-title">切换账号</div>
+      ${this.accounts.map(account => `
+        <div class="account-switch-item ${account.is_active ? 'active' : ''}" data-appid="${accountEscape(account.appid)}" role="button" tabindex="0">
+          ${accountAvatar(account)}
+          <div class="info">
+            <div class="name">${accountEscape(account.bot_name || account.appid)}</div>
+            <div class="status"><i class="${account.is_running ? 'online' : ''}"></i>${account.is_running ? '在线' : '离线'}</div>
+          </div>
+          <button class="remove-btn" data-appid="${accountEscape(account.appid)}" title="删除账号" aria-label="删除账号">×</button>
         </div>
-        <div class="info">
-          <div class="name">${acc.bot_name || acc.appid}</div>
-          <div class="status">${acc.is_running ? '在线' : '离线'}</div>
-        </div>
-        <button class="remove-btn" data-appid="${acc.appid}" title="删除账号">×</button>
-      </div>
-    `).join('');
-    
-    // 绑定切换事件
+      `).join('')}
+    `;
     switcher.querySelectorAll('.account-switch-item').forEach(item => {
-      item.addEventListener('click', (e) => {
-        if (e.target.classList.contains('remove-btn')) return;
-        const appid = item.dataset.appid;
-        this.switchAccount(appid);
-      });
+      const activate = event => {
+        if (event.target.closest('.remove-btn')) return;
+        if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) return;
+        event.preventDefault();
+        this.switchAccount(item.dataset.appid);
+      };
+      item.addEventListener('click', activate);
+      item.addEventListener('keydown', activate);
     });
-    
-    // 绑定删除事件
-    switcher.querySelectorAll('.remove-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const appid = btn.dataset.appid;
-        this.removeAccount(appid);
+    switcher.querySelectorAll('.remove-btn').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        this.removeAccount(button.dataset.appid);
       });
     });
   }
-  
-  async switchAccount(appid) {
+
+  async switchAccount(appid, conversationId = '') {
     try {
-      const resp = await fetch(`/api/accounts/${appid}/switch`, {
-        method: 'POST'
-      });
-      const data = await resp.json();
-      if (data.ok) {
-        this.currentAccount = this.accounts.find(a => a.appid === appid);
-        this.updateCurrentAccountUI();
-        this.toggleSwitcher(false);
-        
-        // 重新加载数据
-        if (typeof loadConversations === 'function') {
-          await loadConversations();
-        }
-        if (typeof loadStats === 'function') {
-          await loadStats();
-        }
-      } else {
-        alert(data.error || '切换失败');
+      if (appid !== this.getCurrentAccountId()) {
+        await accountJson(await fetch(`/api/accounts/${encodeURIComponent(appid)}/switch`, {
+          method: 'POST',
+        }));
       }
-    } catch (e) {
-      console.error('切换账号失败:', e);
-      alert('网络错误: ' + e.message);
+      await Promise.all([this.loadAccounts(), this.getCurrentAccount()]);
+      this.toggleSwitcher(false);
+      if (typeof currentConv !== 'undefined') currentConv = '';
+      if (typeof lastMsgId !== 'undefined') lastMsgId = 0;
+      if (typeof refreshConversations === 'function') await refreshConversations(false);
+      if (conversationId && typeof selectConv === 'function') {
+        await selectConv(conversationId);
+      } else if (typeof viewMode !== 'undefined' && viewMode === 'home' && typeof loadHomeStats === 'function') {
+        await loadHomeStats();
+      } else if (typeof showChatView === 'function') {
+        showChatView(true);
+      }
+      if (typeof showToast === 'function') showToast(`✓ 已切换到 ${this.currentAccount?.bot_name || appid}`);
+      return true;
+    } catch (error) {
+      if (typeof showToast === 'function') showToast(`⚠ ${error.message}`);
+      return false;
     }
   }
-  
+
   async removeAccount(appid) {
-    if (!confirm('确定要删除这个账号吗？')) {
-      return;
-    }
-    
+    const confirmed = typeof showConfirm === 'function'
+      ? await showConfirm('确定删除这个账号吗？账号下的历史消息不会被删除。', 'warning')
+      : window.confirm('确定删除这个账号吗？');
+    if (!confirmed) return;
     try {
-      const resp = await fetch(`/api/accounts/${appid}`, {
-        method: 'DELETE'
-      });
-      const data = await resp.json();
-      if (data.ok) {
-        await this.loadAccounts();
-        await this.getCurrentAccount();
-      } else {
-        alert(data.error || '删除失败');
+      await accountJson(await fetch(`/api/accounts/${encodeURIComponent(appid)}`, { method: 'DELETE' }));
+      await this.loadAccounts();
+      if (!this.accounts.length) {
+        window.location.href = '/login';
+        return;
       }
-    } catch (e) {
-      console.error('删除账号失败:', e);
-      alert('网络错误: ' + e.message);
+      await this.getCurrentAccount();
+      if (typeof refreshConversations === 'function') await refreshConversations(false);
+    } catch (error) {
+      if (typeof showToast === 'function') showToast(`⚠ ${error.message}`);
     }
   }
-  
+
   toggleSwitcher(show) {
     const switcher = document.getElementById('accountSwitcher');
-    if (switcher) {
-      this.switcherVisible = show !== undefined ? show : !this.switcherVisible;
-      switcher.style.display = this.switcherVisible ? 'block' : 'none';
-    }
+    if (!switcher || !this.accounts.length) return;
+    this.switcherVisible = show === undefined ? !this.switcherVisible : show;
+    switcher.classList.toggle('show', this.switcherVisible);
   }
-  
+
   bindEvents() {
-    // 点击头像切换账号
-    const avatarBtn = document.getElementById('railBotAvatar');
-    if (avatarBtn) {
-      avatarBtn.addEventListener('click', () => {
-        this.toggleSwitcher();
-      });
-    }
-    
-    // 添加账号按钮
-    const addBtn = document.getElementById('btnAddAccount');
-    if (addBtn) {
-      addBtn.addEventListener('click', () => {
-        this.showAddAccountModal();
-      });
-    }
-    
-    // 点击其他地方关闭切换器
-    document.addEventListener('click', (e) => {
+    if (this.eventsBound) return;
+    this.eventsBound = true;
+    const avatar = document.getElementById('railBotAvatar');
+    const add = document.getElementById('btnAddAccount');
+    const modal = document.getElementById('addAccountModal');
+    const cancel = document.getElementById('btnCancelAddAccount');
+    const form = document.getElementById('addAccountForm');
+    if (avatar) avatar.addEventListener('click', event => {
+      event.stopPropagation();
+      this.toggleSwitcher();
+    });
+    if (add) add.addEventListener('click', () => this.showAddAccountModal());
+    if (cancel) cancel.addEventListener('click', () => this.hideAddAccountModal());
+    if (form) form.addEventListener('submit', event => {
+      event.preventDefault();
+      this.addAccount();
+    });
+    if (modal) modal.addEventListener('click', event => {
+      if (event.target === modal) this.hideAddAccountModal();
+    });
+    document.addEventListener('click', event => {
       const switcher = document.getElementById('accountSwitcher');
-      const avatarBtn = document.getElementById('railBotAvatar');
-      if (switcher && avatarBtn) {
-        if (!switcher.contains(e.target) && !avatarBtn.contains(e.target)) {
-          this.toggleSwitcher(false);
-        }
+      if (switcher && !switcher.contains(event.target)) this.toggleSwitcher(false);
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        this.hideAddAccountModal();
+        this.toggleSwitcher(false);
       }
     });
   }
-  
+
   showAddAccountModal() {
     const modal = document.getElementById('addAccountModal');
-    if (modal) {
-      modal.style.display = 'flex';
-      document.getElementById('newAppid').value = '';
-      document.getElementById('newSecret').value = '';
-      document.getElementById('addAccountError').style.display = 'none';
-    }
+    if (!modal) return;
+    document.getElementById('addAccountForm')?.reset();
+    const error = document.getElementById('addAccountError');
+    if (error) error.style.display = 'none';
+    modal.classList.add('show');
+    setTimeout(() => document.getElementById('newAppid')?.focus(), 80);
   }
-  
+
   hideAddAccountModal() {
-    const modal = document.getElementById('addAccountModal');
-    if (modal) {
-      modal.style.display = 'none';
-    }
+    document.getElementById('addAccountModal')?.classList.remove('show');
   }
-  
+
   async addAccount() {
     const appid = document.getElementById('newAppid').value.trim();
     const secret = document.getElementById('newSecret').value.trim();
-    const errorEl = document.getElementById('addAccountError');
-    
+    const error = document.getElementById('addAccountError');
+    const submit = document.getElementById('btnSubmitAddAccount');
+    error.style.display = 'none';
     if (!appid || !secret) {
-      errorEl.textContent = '请输入 AppID 和 Secret';
-      errorEl.style.display = 'block';
+      error.textContent = '请输入 AppID 和 AppSecret';
+      error.style.display = 'block';
       return;
     }
-    
+    submit.disabled = true;
+    submit.textContent = '登录中...';
     try {
-      const resp = await fetch('/api/accounts/login', {
+      await accountJson(await fetch('/api/accounts/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appid, secret })
-      });
-      
-      const data = await resp.json();
-      if (data.ok) {
-        this.hideAddAccountModal();
-        await this.loadAccounts();
-        await this.getCurrentAccount();
-        
-        // 重新加载数据
-        if (typeof loadConversations === 'function') {
-          await loadConversations();
-        }
-      } else {
-        errorEl.textContent = data.error || '添加失败';
-        errorEl.style.display = 'block';
-      }
-    } catch (e) {
-      errorEl.textContent = '网络错误: ' + e.message;
-      errorEl.style.display = 'block';
+        body: JSON.stringify({ appid, secret }),
+      }));
+      this.hideAddAccountModal();
+      await Promise.all([this.loadAccounts(), this.getCurrentAccount()]);
+      if (typeof refreshConversations === 'function') await refreshConversations(false);
+      if (typeof loadHomeStats === 'function') await loadHomeStats();
+      if (typeof showToast === 'function') showToast('✓ 账号已添加');
+    } catch (requestError) {
+      error.textContent = requestError.message;
+      error.style.display = 'block';
+    } finally {
+      submit.disabled = false;
+      submit.textContent = '登录并添加';
     }
   }
 }
 
-// 全局实例
 const accountManager = new AccountManager();
+window.accountManager = accountManager;

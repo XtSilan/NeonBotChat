@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NeonBotChat - 登录</title>
-  <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/accounts.css">
+  <link rel="stylesheet" href="css/base.css?v=26.9.0">
+  <link rel="stylesheet" href="css/accounts.css?v=26.9.0">
 </head>
 <body>
   <div id="loginPage" class="login-page">
     <div class="login-container">
       <div class="login-logo">
-        <img src="icons/bot.svg" alt="NeonBotChat">
+        <img src="icons/bot.svg" class="svg-icon" alt="NeonBotChat">
         <h1>NeonBotChat</h1>
       </div>
       
@@ -31,18 +31,13 @@
           <label for="loginSecret">AppSecret</label>
           <input type="password" id="loginSecret" placeholder="输入 AppSecret" required>
         </div>
-        <div class="form-actions">
-          <label class="remember-me">
-            <input type="checkbox" id="rememberAccount" checked>
-            <span>保存账号</span>
-          </label>
-          <button type="submit" class="btn-login">登录</button>
-        </div>
+        <div id="loginError" class="error-message" role="alert" style="display:none;"></div>
+        <button type="submit" class="btn-login" id="loginSubmit">登录</button>
       </form>
     </div>
   </div>
   
-  <script src="js/accounts.js"></script>
+  <script src="js/accounts.js?v=26.9.0"></script>
   <script>
     const loginManager = new LoginManager();
     loginManager.init();
